@@ -56,9 +56,13 @@ def bin_bed(bedtool, bin_size, stride):
     Bins bed regions.
     """
     windows = bedtool.window_maker(bedtool, w=bin_size, s=stride, i="winnum")
+    ## the last window in each region has variable length
+    ## we need to remove windows < bin_size/2
+    ## and pad the rest to match the bin_size
     # group last region windows
     window_numbers = np.array([window.count for window in windows])
     first_window_indxs = np.where(window_numbers == 1)[0]
+    # last windows come before first windows, except the first one
     last_window_indxs = first_window_indxs[1:] - 1
     last_windows = windows.at(last_window_indxs)
     # group all other windows
@@ -67,5 +71,5 @@ def bin_bed(bedtool, bin_size, stride):
     non_last_windows = windows.at(non_last_window_indxs)
     # pad last windows
     padded_last_windows = last_windows.each(pad_interval, bin_size)
-    # combine both sets of windows
+    # combine padded last windows with all other windows
     return combine_bedtools([non_last_windows, padded_last_windows])

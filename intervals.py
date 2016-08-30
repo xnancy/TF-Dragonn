@@ -23,7 +23,6 @@ def multibed_intersection_labels(region_bedtool, feature_bedtools, f=0.5, F=0.5,
     return np.concatenate(tuple(labels), axis=1)
 
 
-
 def combine_bedtools(bedtools):
     """
     Combines sequence of bedtools.
@@ -34,6 +33,21 @@ def combine_bedtools(bedtools):
                 yield interval
 
     return BedTool(generate_all_intervals())
+
+
+def filter_interval_by_chrom(interval, chrom_list):
+    """
+    Subsets to intervals in chr list.
+    To be used with BedTool.each
+
+    Parameters
+    ----------
+    chrom_list : list of str
+    """
+    if interval.chrom in chrom_list:
+        return interval
+    else:
+        return False
 
 
 def pad_interval(interval, interval_size):

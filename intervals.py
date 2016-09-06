@@ -100,6 +100,8 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
         None items are treated as missing data.
     region_bedtools : filename or BedTool, optional
         If not set, union of tf_feature_peak_bedtools is used.
+    filter_flank_overlaps : bool, default: True
+        Labels negative bins whose flanks overlap target regions as ambiguous.
     ambiguous_feature_bedtools : list of filenames, BedTools or None items, optional
     genome : str, default: 'hg19'
         Can be any genome name supported by pybedtools.

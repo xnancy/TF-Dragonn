@@ -1,23 +1,27 @@
 import numpy as np
 import pybedtools
 from pybedtools import BedTool
+from joblib import Parallel, delayed
 
-def bed_intersection_labels(region_bedtool, feature_bedtool, f=0.5, F=0.5, e=True):
+def bed_intersection_labels(region_bedtool, feature_bedtool, f=0.5, F=0.5, e=True, **kwargs):
     """
     intersects regions with feature bed and returns binary labls
     """
-    overlap_counts = [interval.count for interval in
-                      region_bedtool.intersect(feature_bedtool, c=True, f=f, F=F, e=e)]
-    labels = np.array(overlap_counts) > 0
-    
-    return labels.astype(int)[:, np.newaxis]
+    region_bedtool = BedTool(region_bedtool)
+    if feature_bedtool is not None:
+        overlap_counts = [interval.count for interval in
+                          region_bedtool.intersect(BedTool(feature_bedtool), c=True, f=f, F=F, e=e, **kwargs)]
+        labels = np.array(overlap_counts) > 0
+        return labels.astype(int)[:, np.newaxis]
+    else:
+        return -1 * np.ones((region_bedtool.count(), 1))
 
 
-def multibed_intersection_labels(region_bedtool, feature_bedtools, f=0.5, F=0.5, e=True):
+def multibed_intersection_labels(region_bedtool, feature_bedtools, f=0.5, F=0.5, e=True, **kwargs):
     """
     intersects regions with all feature beds and returns binary labels
     """
-    labels = [bed_intersection_labels(region_bedtool, feature_bedtool, f=f, F=F, e=e)
+    labels = [bed_intersection_labels(region_bedtool, feature_bedtool, f=f, F=F, e=e, **kwargs)
               for feature_bedtool in feature_bedtools]
 
     return np.concatenate(tuple(labels), axis=1)
@@ -75,26 +79,45 @@ def bin_bed(bedtool, bin_size, stride):
     return windows.each(pad_interval, bin_size)
 
 
-def get_tf_predictive_setup(region_bedtool, true_feature_bedtools,
+def bed_intersection_labels_star(args):
+        return bed_intersection_labels(*args)
+
+
+def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
                             bin_size=200, flank_size=400, stride=50,
-                            filter_flank_overlaps=True,
-                            ambiguous_feature_bedtools=None):
+                            filter_flank_overlaps=True, n_jobs=1,
+                            ambiguous_feature_bedtools=None,
+                            genome='hg19'):
     """
     Implements the tf (and general) imputation data setup for a single sample.
-    Assumes genome is hg19.
-    TODO: parallelize intersection calls -takes most of the runtime for multiple feature beds.
+    TODOs
+        multiprocess each set of bed intersections
+        support chrom.sizes file for personal genomes
 
     Parameters
     ----------
-    region_bedtools : list of BedTools
-    tf_feature_peak_bedtools : list of BedTool or None elements
-    ambiguous_feature_bedtools : list of BedTool or None elements, optional
+    tf_feature_peak_bedtools : list of filenames, BedTools or None items
+        None items are treated as missing data.
+    region_bedtools : filename or BedTool, optional
+        If not set, union of tf_feature_peak_bedtools is used.
+    ambiguous_feature_bedtools : list of filenames, BedTools or None items, optional
+    genome : str, default: 'hg19'
+        Can be any genome name supported by pybedtools.
     """
+    # initialize feature bedtools
+    true_feature_bedtools = [BedTool(true_feature_bedtool)
+                             for true_feature_bedtool in true_feature_bedtools]
     # sanity checks
     if ambiguous_feature_bedtools is not None:
         assert len(ambiguous_feature_bedtools) == len(true_feature_bedtools)
+        ambiguous_feature_bedtools = [BedTool(ambiguous_feature_bedtool)
+                                      for ambiguous_feature_bedtool in ambiguous_feature_bedtools]
     # bin region_bedtools
-    bins = bin_bed(region_bedtool, bin_size=bin_size, stride=stride)
+    if region_bedtool is not None:
+        bins = bin_bed(region_bedtool, bin_size=bin_size, stride=stride)
+    else: # use union of true peak bedtools
+        region_bedtool = BedTool.cat(*true_feature_bedtools, postmerge=True, force_truncate=True)
+        bins = bin_bed(region_bedtool, bin_size=bin_size, stride=stride)
     # filter bins to chr1-22,X,Y
     chrom_list = ["chr%i" % (i) for i in range(1, 23)]
     chrom_list += ["chrX", "chrY"]
@@ -102,15 +125,18 @@ def get_tf_predictive_setup(region_bedtool, true_feature_bedtools,
     bins = bins.saveas() # save to temp file to enable counting
     num_bins = bins.count()
     # set genome to hg19
-    bins = bins.set_chromsizes('hg19')
+    bins = bins.set_chromsizes(genome)
     # intersect bins and tf_true_peaks for true labels
-    true_labels_list = []
-    for true_feature_bedtool in true_feature_bedtools:
-        if true_feature_bedtool is not None:
+    if n_jobs == 1:
+        true_labels_list = []
+        for true_feature_bedtool in true_feature_bedtools:
             true_labels = bed_intersection_labels(bins, true_feature_bedtool)
-        else:
-            true_labels = -1*np.ones((num_bins, 1))
-        true_labels_list.append(true_labels)
+            true_labels_list.append(true_labels)
+    elif n_jobs > 1: # multiprocess bed intersections
+        # save feature bedtools in temp files. Note: not necessary when inputs are filnames
+        true_feature_bedtools = [true_feature_bedtool.saveas() for true_feature_bedtool in true_feature_bedtools]
+        true_labels_list = Parallel(n_jobs=n_jobs)(delayed(bed_intersection_labels)(bins.fn, true_feature_bedtool.fn)
+                                                   for true_feature_bedtool in true_feature_bedtools)
     true_labels = np.concatenate(true_labels_list, axis=1)
     bins_and_flanks = bins.slop(b=flank_size)
     if filter_flank_overlaps:

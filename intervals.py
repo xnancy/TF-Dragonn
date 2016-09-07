@@ -2,6 +2,7 @@ import numpy as np
 import pybedtools
 from pybedtools import BedTool
 from joblib import Parallel, delayed
+from builtins import zip
 
 def bed_intersection_labels(region_bedtool, feature_bedtool, f=0.5, F=0.5, e=True, **kwargs):
     """

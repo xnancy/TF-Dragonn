@@ -171,3 +171,21 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
         true_labels[true_labels == 0][ambg_bin_labels == 1] = -1
         # TODO: do we want to also filter based on any flank overlap with ambiguous features??
     return bins_and_flanks, true_labels
+
+
+def train_test_chr_split(intervals, labels, test_chr):
+    train_intervals = []
+    train_labels = []
+    test_intervals = []
+    test_labels = []
+    for interval, label in zip(intervals, labels):
+        if interval.chrom in test_chr:
+            test_intervals.append(interval)
+            test_labels.append(label)
+        else:
+            train_intervals.append(interval)
+            train_labels.append(label)
+    train_labels = np.array(train_labels)
+    test_labels = np.array(test_labels)
+
+    return train_intervals, train_labels, test_intervals, test_labels

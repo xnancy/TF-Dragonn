@@ -88,7 +88,7 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
                             bin_size=200, flank_size=400, stride=50,
                             filter_flank_overlaps=True, n_jobs=1,
                             ambiguous_feature_bedtools=None,
-                            genome='hg19'):
+                            genome='hg19', save_to_prefix=None):
     """
     Implements the tf (and general) imputation data setup for a single sample.
     TODOs
@@ -171,6 +171,11 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
         # we label negative bins that overlap ambiguous feature as ambiguous
         true_labels[true_labels == 0][ambg_bin_labels == 1] = -1
         # TODO: do we want to also filter based on any flank overlap with ambiguous features??
+    if save_to_prefix is not None: # save intervals and labels
+        intervals_fname = "%s.intervals.bed" % (save_to_prefix)
+        labels_fname = "%s.labels.npy" % (save_to_prefix)
+        bins_and_flanks = bins_and_flanks.saveas().moveto(intervals_fname)
+        np.save(labels_fname, true_labels)
     return bins_and_flanks, true_labels
 
 

@@ -117,7 +117,7 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
                                       for ambiguous_feature_bedtool in ambiguous_feature_bedtools]
     # bin region_bedtools
     if region_bedtool is not None:
-        bins = bin_bed(region_bedtool, bin_size=bin_size, stride=stride)
+        bins = bin_bed(BedTool(region_bedtool), bin_size=bin_size, stride=stride)
     else: # use union of true peak bedtools
         region_bedtool = BedTool.cat(*true_feature_bedtools, postmerge=True, force_truncate=True)
         bins = bin_bed(region_bedtool, bin_size=bin_size, stride=stride)
@@ -137,39 +137,38 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
             true_labels_list.append(true_labels)
     elif n_jobs > 1: # multiprocess bed intersections
         # save feature bedtools in temp files. Note: not necessary when inputs are filnames
-        true_feature_bedtools = [true_feature_bedtool.saveas() for true_feature_bedtool in true_feature_bedtools]
-        true_labels_list = Parallel(n_jobs=n_jobs)(delayed(bed_intersection_labels)(bins.fn, true_feature_bedtool.fn)
-                                                   for true_feature_bedtool in true_feature_bedtools)
+        true_feature_bedtools = [bedtool.saveas() for bedtool in true_feature_bedtools]
+        true_labels_list = Parallel(n_jobs=n_jobs)(delayed(bed_intersection_labels)(bins.fn, bedtool.fn)
+                                                   for bedtool in true_feature_bedtools)
     true_labels = np.concatenate(true_labels_list, axis=1)
     bins_and_flanks = bins.slop(b=flank_size)
     if filter_flank_overlaps:
         # intersect bins and flanks for any overlap  with true features
-        flank_labels_list = []
-        for true_feature_bedtool in true_feature_bedtools:
-            if true_feature_bedtool is not None:
-                flank_labels = bed_intersection_labels(bins, true_feature_bedtool,
-                                                       f=10**-9, F=10**-9)
-            else:
-                flank_labels = np.zeros((num_bins, 1))
-            flank_labels_list.append(flank_labels)
+        if n_jobs == 1:
+            flank_labels_list = []
+            for true_feature_bedtool in true_feature_bedtools:
+                flank_labels = bed_intersection_labels(bins, true_feature_bedtool, f=10**-9, F=10**-9)
+                flank_labels_list.append(flank_labels)
+        elif n_jobs > 1:
+            flank_labels_list = Parallel(n_jobs=n_jobs)(delayed(bed_intersection_labels)(bins.fn, bedtool.fn, f=10**-9, F=10**-9)
+                                                        for bedtool in true_feature_bedtools)
         flank_labels = np.concatenate(flank_labels_list, axis=1)
-        ## we label negative bins whose flanks have
-        ## any overlap with true features as ambiguous
-        neg_bin_indxs = true_labels == 0
-        neg_bin_pos_flank_indxs = (neg_bin_indxs*(flank_labels == 1)).astype(bool)
-        true_labels[neg_bin_pos_flank_indxs] = -1
+        # we label negative bins with any flank overlap with true features as ambiguous
+        true_labels[(true_labels == 0) * (flank_labels == 1)] = -1
     if ambiguous_feature_bedtools is not None:
         # intersect bins and ambiguous tfs for ambiguous labels
-        ambg_bin_labels_list = []
-        for amb_feature_bedtools in ambiguous_feature_bedtools:
-            if amb_feature_bedtools is not None:
-                amb_bin_labels = bed_intersection_labels(bins, amb_feature_bedtools)
-            else:
-                amb_bin_labels = np.zeros((num_bins, 1))
-            ambg_bin_labels_list.append(ambg_bin_labels_list)
-        ambg_bin_labels = np.concatenate(ambg_bin_labels_list, axis=1)
+        if n_jobs == 1:
+            ambiguous_labels_list = []
+            for ambiguous_feature_bedtool in ambiguous_feature_bedtools:
+                ambiguous_labels = bed_intersection_labels(bins, ambiguous_feature_bedtool)
+                ambiguous_labels_list.append(ambiguous_labels)
+        elif n_jobs > 1:
+            ambiguous_feature_bedtools = [bedtool.saveas() for bedtool in ambiguous_feature_bedtools]
+            ambiguous_labels_list = Parallel(n_jobs=n_jobs)(delayed(bed_intersection_labels)(bins.fn, bedtool.fn)
+                                                            for bedtool in ambiguous_feature_bedtools)
+        ambiguous_labels = np.concatenate(ambiguous_labels_list, axis=1)
         # we label negative bins that overlap ambiguous feature as ambiguous
-        true_labels[true_labels == 0][ambg_bin_labels == 1] = -1
+        true_labels[(true_labels == 0) * (ambiguous_labels == 1)] = -1
         # TODO: do we want to also filter based on any flank overlap with ambiguous features??
     if save_to_prefix is not None: # save intervals and labels
         intervals_fname = "%s.intervals.bed" % (save_to_prefix)

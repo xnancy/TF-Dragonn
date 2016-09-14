@@ -164,6 +164,8 @@ def write_dl_scores_bw(intervals, dl_scores, prefix_base, chrom_sizes_fname, tas
         file with chromosome sizes. TODO: infer these using pybedtools.
     task_names : list, optional 
     """
+    if task_names is not None:
+        assert len(task_names) == dl_scores.shape[0]
     for _i, sequence_dl_scores in enumerate(dl_scores):
         print("writing scores to bedGraph file..")
         sequence_dl_scores_2d = np.sum(sequence_dl_scores.squeeze(), axis=1)

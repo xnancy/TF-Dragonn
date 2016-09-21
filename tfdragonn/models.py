@@ -12,7 +12,7 @@ from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers.recurrent import GRU
 from keras.regularizers import l1
 
-from metrics import ClassificationResult
+from .metrics import ClassificationResult
 
 
 def class_weights(y):

@@ -80,10 +80,6 @@ def bin_bed(bedtool, bin_size, stride):
     return windows.each(pad_interval, bin_size)
 
 
-def bed_intersection_labels_star(args):
-        return bed_intersection_labels(*args)
-
-
 def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
                             bin_size=200, flank_size=400, stride=50,
                             filter_flank_overlaps=True, n_jobs=1,

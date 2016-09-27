@@ -92,7 +92,6 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
     """
     Implements the tf (and general) imputation data setup for a single sample.
     TODOs
-        multiprocess each set of bed intersections
         support chrom.sizes file for personal genomes
 
     Parameters

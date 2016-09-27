@@ -1,0 +1,5 @@
+{
+    "feature_beds": ["/mnt/lab_data/kundaje/jisraeli/projects/rstowers_collab/atac_peaks/soft_gels/merged_union_rep1-rep2_rep1-rep3_rep2-rep3.narrowPeak",
+		     "/mnt/lab_data/kundaje/jisraeli/projects/rstowers_collab/atac_peaks/stiff_gels/merged_union_rep1-rep2_rep1-rep3_rep2-rep3.narrowPeak"],
+    "genome_fasta": "/mnt/data/annotations/by_organism/human/hg19.GRCh37/hg19.genome.fa"
+}

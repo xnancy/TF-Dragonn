@@ -10,6 +10,7 @@ config = {
     'install_requires': ['numpy>=1.9', 'keras==0.3.2', 'deeplift', 'sklearn'],
     'dependency_links': ['https://github.com/kundajelab/deeplift/tarball/master#egg=deeplift-0.2'],
     'scripts': [],
+    'entry_points': {'console_scripts': ['tfdragonn = tfdragonn.__main__:main']},
     'name': 'tfdragonn'
 }
 

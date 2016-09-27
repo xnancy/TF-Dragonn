@@ -193,4 +193,4 @@ def train_test_chr_split(intervals, labels, test_chr):
     train_labels = np.array(train_labels)
     test_labels = np.array(test_labels)
 
-    return train_intervals, train_labels, test_intervals, test_labels
+    return train_intervals, test_intervals, train_labels, test_labels

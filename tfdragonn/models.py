@@ -1,4 +1,5 @@
 from __future__ import absolute_import, division, print_function
+import itertools
 import numpy as np
 
 from keras import backend as K
@@ -13,6 +14,44 @@ from keras.layers.recurrent import GRU
 from keras.regularizers import l1
 
 from .metrics import ClassificationResult
+
+def batch_iter(iterable, batch_size):
+    '''iterates in batches.
+    '''
+    it = iter(iterable)
+    try:
+        while True:
+            values = []
+            for n in xrange(batch_size):
+                values += (it.next(),)
+            yield values
+    except StopIteration:
+        # yield remaining values
+        yield values
+
+
+def infinite_batch_iter(iterable, batch_size):
+    '''iterates in batches indefinitely.
+    '''
+    return batch_iter(itertools.cycle(iterable),
+                      batch_size)
+
+
+def generate_signals_from_intervals(intervals, extractor, batch_size=128):
+    """
+    Generates signals extracted on interval batches.
+    """
+    batch_iterator = infinite_batch_iter(intervals, batch_size)
+    for batch_intervals in batch_iterator:
+        yield extractor(batch_intervals)
+
+
+def generate_array_batches(array, batch_size=128):
+    """
+    Generates the array in batches.
+    """
+    for array_batch in infinite_batch_iter(array, batch_size):
+        yield np.vstack(array_batch)
 
 
 def class_weights(y):
@@ -53,7 +92,7 @@ class PrintMetrics(Callback):
 
 
 class SequenceClassifier(object):
-    def __init__(self, X=None, y=None, arch_fname=None, weights_fname=None,
+    def __init__(self, seq_length=None, num_tasks=None, arch_fname=None, weights_fname=None,
                  num_filters=(15, 15, 15), conv_width=(15, 15, 15),
                  pool_width=35, L1=0, dropout=0.0,
                  use_RNN=False, GRU_size=35, TDD_size=15,
@@ -66,10 +105,8 @@ class SequenceClassifier(object):
             self.model = model_from_json(open(arch_fname).read())
             self.model.load_weights(weights_fname)
             self.num_tasks = self.model.layers[-1].output_shape[-1]
-        elif X is not None and y is not None:
-            self.seq_length = X.shape[-1]
-            self.input_shape = X.shape[1:]
-            self.num_tasks = y.shape[1]
+        elif seq_length is not None and num_tasks is not None:
+            self.num_tasks = num_tasks
             self.model = Sequential()
             assert len(num_filters) == len(conv_width)
             for i, (nb_filter, nb_col) in enumerate(zip(num_filters, conv_width)):
@@ -77,7 +114,7 @@ class SequenceClassifier(object):
                 self.model.add(Convolution2D(
                     nb_filter=nb_filter, nb_row=conv_height,
                     nb_col=nb_col, activation='linear',
-                    init='he_normal', input_shape=self.input_shape,
+                    init='he_normal', input_shape=(1, 4, seq_length),
                     W_regularizer=l1(L1), b_regularizer=l1(L1)))
                 self.model.add(Activation('relu'))
                 self.model.add(Dropout(dropout))
@@ -97,7 +134,7 @@ class SequenceClassifier(object):
             loss_func = get_weighted_binary_crossentropy(task_weights[:, 0], task_weights[:, 1])
             self.model.compile(optimizer='adam', loss=loss_func)
         else:
-            raise RuntimeError("SequenceDNN initialization requires X/y data or arch/weights files!")
+            raise RuntimeError("Model initialization requires seq_length and num_tasks or arch/weights files!")
 
     def train(self, X, y, validation_data,
               patience=5, verbose=True, batch_size=128, reweigh_loss_func=False):
@@ -113,6 +150,7 @@ class SequenceClassifier(object):
             X, y, batch_size=batch_size, nb_epoch=self.num_epochs,
             validation_data=validation_data,
             callbacks=self.callbacks, verbose=verbose)
+
 
     def deeplift(self, X, batch_size=200):
         """
@@ -145,9 +183,32 @@ class SequenceClassifier(object):
     def score(self, X, y, metric):
         return self.test(X, y)[metric]
 
-    def predict(self, X):
-        return self.model.predict(X, batch_size=128, verbose=False)
+    def predict(self, X, batch_size=128):
+        return self.model.predict(X, batch_size=batch_size, verbose=False)
 
     
-        
-    
+class StreamingSequenceClassifier(SequenceClassifier):
+
+    def train(self, intervals_train, y_train,
+              intervals_valid, y_valid, fasta_extractor,
+              patience=5, verbose=True, batch_size=128, reweigh_loss_func=False):
+        if reweigh_loss_func:
+            task_weights = np.array([class_weights(y[:, i]) for i in range(y.shape[1])])
+            loss_func = get_weighted_binary_crossentropy(task_weights[:, 0], task_weights[:, 1])
+            self.model.compile(optimizer='adam', loss=loss_func)
+        # define callbacks
+        self.callbacks = [EarlyStopping(monitor='val_loss', patience=patience)]
+        if verbose:
+            self.callbacks.append(PrintMetrics(validation_data, self))
+        # define generators
+        training_generator = zip(generate_signals_from_intervals(intervals_train, fasta_extractor),
+                                 generate_array_batches(y_train, batch_size=batch_size))
+        validation_generator = zip(generate_signals_from_intervals(intervals_valid, fasta_extractor),
+                                   generate_array_batches(labels_valid, batch_size=batch_size))
+        self.model.fit_generator(training_generator, 50000, 4,
+                                 validation_data=validation_generator,
+                                 nb_val_samples=len(intervals_valid))
+
+    def predict(self, intervals, fasta_extractor, batch_size=128):
+        generator = generate_signals_from_intervals(intervals, fasta_extractor)
+        return self.model.predict_generator(self, generator, len(intervals))

@@ -3,12 +3,24 @@ from __future__ import absolute_import
 import argparse
 import json
 import logging
+import numpy as np
+import os
+from pybedtools import BedTool
 
-from genomedatalayer.extractors import FastaExtractor
+from genomedatalayer.extractors import FastaExtractor, MemmappedFastaExtractor
 
 from .intervals import get_tf_predictive_setup, train_test_chr_split 
 
+# setup logging
+log_formatter = \
+    logging.Formatter('%(levelname)s:%(asctime)s:%(name)s] %(message)s')
 logger = logging.getLogger('tf-dragonn')
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)
+handler.setFormatter(log_formatter)
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
+logger.propagate = False
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -35,6 +47,12 @@ def parse_args():
                                                   multiprocessing_parser,
                                                   prefix_parser],
                                          help='model training help')
+    interpret_parser = subparsers.add_parser('interpret',
+                                             parents=[data_config_parser,
+                                                      model_files_parser,
+                                                      multiprocessing_parser,
+                                                      prefix_parser],
+                                             help='interpretation help')
     # return command and command arguments
     args = vars(parser.parse_args())
     command = args.pop("command", None)
@@ -49,45 +67,104 @@ def parse_data_config_file(data_config_file):
     data = json.load(open(data_config_file))
     if 'region_bed' not in data:
         data['region_bed'] = None
-    return data['region_bed'], data['feature_beds'], data['genome_fasta']
+    if 'genome_data_dir' not in data:
+        data['genome_data_dir'] = None
+    return data
 
 
 def main_train(data_config_file=None,
                prefix=None,
                n_jobs=None,
-               model_file=None,
+               arch_file=None,
                weights_file=None):
+    # get matched region beds and feature/tf beds
+    logger.info("parsing data config file..")
+    data = parse_data_config_file(data_config_file)
+    # get regions and labels, split into train/test
+    if os.path.isfile("{}.intervals.bed".format(prefix)) and os.path.isfile("{}.labels.npy".format(prefix)):
+        logger.info("loading intervals from {}.intervals.bed".format(prefix))
+        regions = BedTool("{}.intervals.bed".format(prefix))
+        logger.info("loading labels from {}.labels.npy".format(prefix))
+        labels = np.load("{}.labels.npy".format(prefix))
+    else:
+        logger.info("getting regions and labels")
+        regions, labels = get_tf_predictive_setup(data['feature_beds'], region_bedtool=data['region_bed'],
+                                                  bin_size=200, flank_size=400, stride=200,
+                                                  filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
+                                                  save_to_prefix=prefix)
+    intervals_train, intervals_test, y_train, y_test = train_test_chr_split(regions, labels, ["chr1", "chr2"])
+    interval_length = intervals_train[0].length
+    num_tasks = y_train.shape[1]
+    architecture_parameters = {'num_filters': (35, 35, 35),
+                               'conv_width': (20, 20, 20),
+                               'dropout': 0.1}
+    if data['genome_data_dir'] is not None: # use a streaming model
+        fasta_extractor = MemmappedFastaExtractor(data['genome_data_dir'])
+        logger.info("Initializing a StreamingSequenceClassifer")
+        model = StreamingSequenceClassifier(interval_length, num_tasks, **architecture_parameters)
+        logger.info("Starting to train with streaming data..")
+        model.train(intervals_train, y_train, intervals_valid, y_valid, fasta_extractor)
+    else: # extract encoded data in memory
+        logger.info("extracting data in memory")
+        fasta_extractor = FastaExtractor(genome_fasta)
+        logger.info("extracting test data")
+        X_test = fasta_extractor(intervals_test)
+        logger.info("extracting training data")
+        X_train = fasta_extractor(intervals_train)
+        # initialize model and train
+        ## TODO: load pretrained model and/or architecture
+        logger.info("Initializing a SequenceClassifer")
+        model = SequenceClassifier(interval_length, num_tasks, **architecture_parameters)
+        logger.info("Starting to train")
+        model.train(X_train, y_train, (X_test, y_test), patience=6)
+    model.save(prefix)
+    logger.info("Saved trained model files to {}.arch.json and {}.weights.h5".format(prefix, prefix))
+    logger.info("Done!")
+
+
+def main_interpret(data_config_file=None,
+                   prefix=None,
+                   n_jobs=None,
+                   arch_file=None,
+                   weights_file=None):
+    from dlutils import write_deeplift_track
     # get matched region beds and feature/tf beds
     logger.info("parsing data config file..")
     region_bed, feature_beds, genome_fasta = parse_data_config_file(data_config_file)
     # get regions and labels, split into train/test
-    ## TODO: save/load regions and labels
-    logger.info("getting regions and labels")
-    regions, labels = get_tf_predictive_setup(feature_beds, region_bedtool=region_bed,
-                                              bin_size=200, flank_size=400, stride=200,
-                                              filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs)
-    intervals_train, intervals_test, y_train, y_test = train_test_chr_split(regions, labels, ["chr1", "chr2"])
+    if os.path.isfile("{}.intervals.bed".format(prefix)) and os.path.isfile("{}.labels.npy".format(prefix)):
+        logger.info("loading intervals from {}.intervals.bed".format(prefix))
+        regions = BedTool("{}.intervals.bed".format(prefix))
+        logger.info("loading labels from {}.labels.npy".format(prefix))
+        labels = np.load("{}.labels.npy".format(prefix))
+    else:
+        logger.info("getting regions and labels")
+        regions, labels = get_tf_predictive_setup(feature_beds, region_bedtool=region_bed,
+                                                  bin_size=200, flank_size=400, stride=200,
+                                                  filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
+                                                  save_to_prefix=prefix)
+    logger.info("loading model...")
+    model = SequenceClassifier(arch_fname=arch_file,
+                               weights_fname=weights_file)
     # extract encoded data in memory
-    logger.info("extracting data in memory")
+    logger.info("extracting data from regions..")
     fasta_extractor = FastaExtractor(genome_fasta)
-    logger.info("extracting test data")
-    X_test = fasta_extractor(intervals_test)
-    logger.info("extracting training data")
-    X_train = fasta_extractor(intervals_train)
-    # initialize model and train
-    ## TODO: load pretrained model and/or architecture
-    logger.info("Initializing a SequenceClassifer")
-    model = SequenceClassifier(X_train, y_train, num_filters=(35, 35, 35), conv_width=(20, 20, 20), dropout=0.1)
-    logger.info("Starting to train")
-    model.train(X_train, y_train, (X_test, y_test), patience=6)
-    logger.info("Saving trained model")
-    model.save(prefix)
-    ## TODO: deeplift, browser tracks, motif disocvery 
+    X = fasta_extractor(regions)
+    logger.info("running deeplift..")
+    dl_scores = model.deeplift(X, batch_size=1000)
+    logger.info("starting to write deeplift scores")
+    for i, task_dl_scores in enumerate(dl_scores):
+        logger.info("writing deeplift score track for task {}".format(str(i)))
+        write_deeplift_track(task_dl_scores, regions, "{}.task{}_dl_track".format(prefix, str(i)),
+                             merge_type='max',
+                             CHROM_SIZES='/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes')
+    logger.info("Done!")
 
 
 def main():
     # parse args
-    command_functions = {'train': main_train}
+    command_functions = {'train': main_train,
+                         'interpret': main_interpret}
     command, args = parse_args()
     # perform theano/keras import
     global SequenceClassifier

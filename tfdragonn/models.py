@@ -12,6 +12,7 @@ from keras.layers.core import (
 )
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers.recurrent import GRU
+from keras import optimizers
 from keras.regularizers import l1
 
 from .metrics import ClassificationResult
@@ -38,16 +39,46 @@ def infinite_batch_iter(iterable, batch_size):
                       batch_size)
 
 
+def threaded_generator(generator, num_cached=50):
+    import Queue
+    queue = Queue.Queue(maxsize=num_cached)
+    sentinel = object()  # guaranteed unique reference
+
+    # define producer (putting items into queue)
+    def producer():
+        for item in generator:
+            queue.put(item)
+        queue.put(sentinel)
+
+    # start producer (in a background thread)
+    import threading
+    thread = threading.Thread(target=producer)
+    thread.daemon = True
+    thread.start()
+
+    # run as consumer (read items from queue, in current thread)
+    item = queue.get()
+    while item is not sentinel:
+        yield item
+        queue.task_done()
+        item = queue.get()
+
+
 def generate_signals_from_intervals(intervals, extractor, batch_size=128, indefinitely=True):
     """
     Generates signals extracted on interval batches.
     """
+    interval_length = intervals[0].length
+    batch_array = np.zeros((batch_size, 1, 4, interval_length), dtype=np.float32)
     if indefinitely:
         batch_iterator = infinite_batch_iter(intervals, batch_size)
     else:
         batch_iterator = batch_iter(intervals, batch_size)
     for batch_intervals in batch_iterator:
-        yield extractor(batch_intervals)
+        try:
+            yield extractor(batch_intervals, out=batch_array)
+        except ValueError:
+            yield extractor(batch_intervals)
 
 
 def generate_array_batches(array, batch_size=128):
@@ -135,7 +166,7 @@ class SequenceClassifier(object):
         else:
             raise RuntimeError("Model initialization requires seq_length and num_tasks or arch/weights files!")
 
-    def compile(self, optimizer='adam', y=None):
+    def compile(self, optimizer='adam', lr=0.001, y=None):
         """
         Defines learning parameters and compiles the model.
 
@@ -150,6 +181,8 @@ class SequenceClassifier(object):
             loss_func = get_weighted_binary_crossentropy(task_weights[:, 0], task_weights[:, 1])
         else:
             loss_func='binary_crossentropy'
+        optimizer_cls = getattr(optimizers, optimizer)
+        optimizer = optimizer_cls(lr=lr)
         self.model.compile(optimizer=optimizer, loss=loss_func)
 
     def train(self, X, y, validation_data,
@@ -222,42 +255,41 @@ class StreamingSequenceClassifier(SequenceClassifier):
               intervals_valid, y_valid, fasta_extractor,
               save_best_model_to_prefix=None,
               early_stopping_metric='auPRC', num_epochs=100,
-              batch_size=128, epoch_size=50000,
-              early_stopping_patience=5, verbose=True, reweigh_loss_func=False):
-        ## TODO: run predict loop only once, early stop based on performance metrics
+              batch_size=128, epoch_size=None,
+              early_stopping_patience=5, verbose=True, reweigh_loss_func=False,
+              use_keras_fit_generator=True):
+        ## TODO: add running loss when not using keras fit generator
         if reweigh_loss_func:
             task_weights = np.array([class_weights(y[:, i]) for i in range(y.shape[1])])
             loss_func = get_weighted_binary_crossentropy(task_weights[:, 0], task_weights[:, 1])
             self.model.compile(optimizer='adam', loss=loss_func)
         # define generators
-        training_generator = zip(generate_signals_from_intervals(intervals_train, fasta_extractor),
+        training_generator = zip(generate_signals_from_intervals(intervals_train, fasta_extractor, batch_size=batch_size),
                                  generate_array_batches(y_train, batch_size=batch_size))
-        #validation_generator = zip(generate_signals_from_intervals(intervals_valid, fasta_extractor),
-        #                           generate_array_batches(y_valid, batch_size=batch_size))
+        if not use_keras_fit_generator: # thread the generator with caching
+            from keras.utils.generic_utils import Progbar
+            training_generator = threaded_generator(training_generator, num_cached=10)
         # define callbacks and fit
-        """
-        callbacks = [EarlyStopping(monitor='val_loss', patience=patience)]
-        if verbose:
-            callbacks.append(PrintIntervalMetrics(intervals_valid, y_valid, fasta_extractor, self))
-        self.model.fit_generator(training_generator,
-                                 samples_per_epoch=50000,
-                                 nb_epoch=100,
-                                 validation_data=validation_generator,
-                                 nb_val_samples=len(y_valid),
-                                 callbacks=callbacks)
-        """
         valid_metrics = []
         best_metric = np.inf if early_stopping_metric == 'Loss' else -np.inf
         samples_per_epoch = len(y_train) if epoch_size is None else epoch_size
+        batches_per_epoch = int(samples_per_epoch / batch_size)
         for epoch in range(1, num_epochs + 1):
-            self.model.fit_generator(training_generator,
-                                     samples_per_epoch=samples_per_epoch,
-                                     nb_epoch=1)
+            if use_keras_fit_generator:
+                self.model.fit_generator(training_generator,
+                                         samples_per_epoch=samples_per_epoch,
+                                         nb_epoch=1)
+            else: # generate and make updates batch by batch
+                progbar = Progbar(target=samples_per_epoch)
+                for batch_indxs in range(1, batches_per_epoch + 1):
+                    x, y = next(training_generator)
+                    self.model.train_on_batch(x, y)
+                    progbar.update(batch_indxs*batch_size)
             epoch_valid_metrics = self.test(intervals_valid, y_valid, fasta_extractor)
             valid_metrics.append(epoch_valid_metrics)
             if verbose:
-                print('Epoch {}:'.format(epoch))
-                print('{}'.format(epoch_valid_metrics), end='')
+                print('\nEpoch {}:'.format(epoch))
+                print('{}\n'.format(epoch_valid_metrics), end='')
             current_metric = epoch_valid_metrics[early_stopping_metric].mean()
             if (early_stopping_metric == 'Loss') == (current_metric <= best_metric):
                 if verbose:
@@ -291,3 +323,24 @@ class StreamingSequenceClassifier(SequenceClassifier):
     def test(self, intervals, y, fasta_extractor):
         predictions = self.predict(intervals, fasta_extractor)
         return ClassificationResult(y, predictions)
+
+    def deeplift(self, intervals, fasta_extractor, batch_size=200):
+        from deeplift import keras_conversion as kc
+        from deeplift.blobs import MxtsMode
+        # normalize sequence convolution weights
+        kc.mean_normalise_first_conv_layer_weights(self.model, None)
+        # run deeplift
+        deeplift_model = kc.convert_sequential_model(
+            self.model, mxts_mode=MxtsMode.DeepLIFT)
+        target_contribs_func = deeplift_model.get_target_contribs_func(
+                find_scores_layer_idx=0)
+        generator = generate_signals_from_intervals(
+            intervals, fasta_extractor, batch_size=batch_size, indefinitely=False)
+        dl_scores = []
+        for batch in generator:
+            batch_dl_scores = np.asarray([
+                target_contribs_func(task_idx=i, input_data_list=[batch],
+                                 batch_size=batch_size, progress_update=None)
+                for i in range(self.num_tasks)])
+            dl_scores.append(batch_dl_scores)
+        return np.concatenate(tuple(dl_scores), axis=1)

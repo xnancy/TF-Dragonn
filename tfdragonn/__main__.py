@@ -7,7 +7,9 @@ import numpy as np
 import os
 from pybedtools import BedTool
 
-from genomedatalayer.extractors import FastaExtractor, MemmappedFastaExtractor
+from genomedatalayer.extractors import (
+    FastaExtractor, MemmappedBigwigExtractor, MemmappedFastaExtractor
+)
 
 from .intervals import get_tf_predictive_setup, train_test_chr_split 
 
@@ -21,6 +23,12 @@ handler.setFormatter(log_formatter)
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 logger.propagate = False
+
+RAW_INPUT_KEYS = ['dnase_bigwig', 'genome_fasta']
+input2memmap_extractor = {'dnase_bigwig': MemmappedBigwigExtractor,
+                          'genome_fasta': MemmappedFastaExtractor}
+input2memmap_input = {'dnase_bigwig': 'dnase_data_dir',
+                      'genome_fasta': 'genome_data_dir'}
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -37,11 +45,24 @@ def parse_args():
     multiprocessing_parser = argparse.ArgumentParser(add_help=False)
     multiprocessing_parser.add_argument('--n-jobs', type=int, default=1,
                                         help='num of processes used for preprocessing and postprocessing')
+    output_file_parser = argparse.ArgumentParser(add_help=False)
+    output_file_parser.add_argument('--output-file', type=str, required=True,
+                                    help='output file to write to')
     prefix_parser = argparse.ArgumentParser(add_help=False)
     prefix_parser.add_argument('--prefix', type=str, required=True,
                                help='prefix to output files')
+    memmap_dir_parser = argparse.ArgumentParser(add_help=False)
+    memmap_dir_parser.add_argument('--memmap-dir', type=str, required=True,
+                               help='directories with memmaped data are created in this directory.')
     # define commands 
     subparsers = parser.add_subparsers(help='tf-dragonn command help', dest='command')
+    memmap_parser = subparsers.add_parser('memmap',
+                                         parents=[data_config_parser,
+                                                  memmap_dir_parser,
+                                                  output_file_parser],
+                                         help='This command memory maps raw inputs in'+
+                                              'the data config file for use with streaming models,'+
+                                              'and writes a new data config with memmaped inputs. ')
     train_parser = subparsers.add_parser('train',
                                          parents=[data_config_parser,
                                                   multiprocessing_parser,
@@ -66,16 +87,59 @@ def parse_args():
     return command, args
 
 
+def parse_dataset(dataset):
+    """
+    Parses dataset dictionary.
+
+    Parameters
+    ----------
+    dataset : dict
+    """
+    optional_keys = ['region_bed', 'regions', 'labels', 'genome_data_dir', 'genome_fasta']
+    for key in optional_keys:
+        if key not in dataset:
+            dataset[key] = None
+
+    return dataset
+
+
 def parse_data_config_file(data_config_file):
     """
     Parses data config file and returns region beds, feature beds, and data files.
     """
     data = json.load(open(data_config_file))
-    if 'region_bed' not in data:
-        data['region_bed'] = None
-    if 'genome_data_dir' not in data:
-        data['genome_data_dir'] = None
+    for dataset_id in data:
+        data[dataset_id] = parse_dataset(data[dataset_id])
+
     return data
+
+
+def main_memmap(data_config_file=None,
+                memmap_dir=None,
+                output_file=None):
+    """
+    Memmaps every raw input in the data config file.
+    Returns new data config file with memmaped inputs.
+    """
+    import ntpath
+    data = parse_data_config_file(data_config_file)
+    logger.info("Memapping input data in {}...".format(data_config_file))
+    for dataset_id, dataset in data.items():
+        for input_key in RAW_INPUT_KEYS:
+            raw_input_fname = dataset[input_key]
+            if raw_input_fname is not None:
+                input_memmap_dir = os.path.join(memmap_dir, ntpath.basename(raw_input_fname))
+                logger.info("Encoding {} in {}...".format(raw_input_fname, input_memmap_dir))
+                extractor = input2memmap_extractor[input_key]
+                extractor.setup_mmap_arrays(raw_input_fname, input_memmap_dir)
+                data[dataset_id][input2memmap_input[input_key]] = input_memmap_dir
+                del data[dataset_id][input_key]
+                logger.info("Replaced {}: {} with\n\t\t\t\t\t\t  {}: {} in\n\t\t\t\t\t\t  {} dataset".format(
+                    input_key, raw_input_fname, input2memmap_input[input_key], input_memmap_dir, dataset_id))
+    # write json with memmaped data
+    json.dump(data, open(output_file, "w"), indent=4)
+    logger.info("Wrote memaped data config file to {}.".format(output_file))
+    logger.info("Done!")
 
 
 def main_train(data_config_file=None,
@@ -86,12 +150,25 @@ def main_train(data_config_file=None,
     # get matched region beds and feature/tf beds
     logger.info("parsing data config file..")
     data = parse_data_config_file(data_config_file)
+    #inputs, datasets = parse_data_config_file(data_config_file)
     # get regions and labels, split into train/test
+    """
+    if len(datasets) > 1:
+        raise RuntimeError("Data configurations with more than one datasets are not supported yet!")
+    else:
+        data = datasets[0]
+    """
     if os.path.isfile("{}.intervals.bed".format(prefix)) and os.path.isfile("{}.labels.npy".format(prefix)):
         logger.info("loading intervals from {}.intervals.bed".format(prefix))
         regions = BedTool("{}.intervals.bed".format(prefix))
         logger.info("loading labels from {}.labels.npy".format(prefix))
         labels = np.load("{}.labels.npy".format(prefix))
+    elif data['regions'] is not None and data['labels'] is not None:
+        if os.path.isfile(data['regions']) and os.path.isfile(data['labels']):
+            logger.info("loading intervals from {}".format(data['regions']))
+            regions = BedTool(data['regions'])
+            logger.info("loading labels from {}".format(data['labels']))
+            labels = np.load(data['labels'])
     else:
         logger.info("getting regions and labels")
         regions, labels = get_tf_predictive_setup(data['feature_beds'], region_bedtool=data['region_bed'],
@@ -115,7 +192,7 @@ def main_train(data_config_file=None,
                     save_best_model_to_prefix=prefix)
     else: # extract encoded data in memory
         logger.info("extracting data in memory")
-        fasta_extractor = FastaExtractor(genome_fasta)
+        fasta_extractor = FastaExtractor(data['genome_fasta'])
         logger.info("extracting test data")
         X_test = fasta_extractor(intervals_test)
         logger.info("extracting training data")
@@ -154,19 +231,25 @@ def main_interpret(data_config_file=None,
                                                   bin_size=200, flank_size=400, stride=200,
                                                   filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
                                                   save_to_prefix=prefix)
-    if data['genome_data_dir'] is not None: # use a streaming model                                                                                                                  
+    if data['genome_data_dir'] is not None: # use a streaming model
         fasta_extractor = MemmappedFastaExtractor(data['genome_data_dir'])
         logger.info("Initializing a StreamingSequenceClassifer")
+        model = StreamingSequenceClassifier(arch_fname=arch_file,
+                                            weights_fname=weights_file)
+        logger.info("running deeplift..")
+        dl_scores = model.deeplift(regions, fasta_extractor, batch_size=1000)
+        dl_scores = dl_scores.sum(axis=3, keepdims=True)
     else:
         logger.info("loading model...")
         model = SequenceClassifier(arch_fname=arch_file,
                                    weights_fname=weights_file)
         # extract encoded data in memory
         logger.info("extracting data from regions..")
-        fasta_extractor = FastaExtractor(genome_fasta)
+        fasta_extractor = FastaExtractor(data['genome_fasta'])
         X = fasta_extractor(regions)
         logger.info("running deeplift..")
         dl_scores = model.deeplift(X, batch_size=1000)
+        dl_scores = dl_scores.sum(axis=3, keepdims=True)
     logger.info("starting to write deeplift scores")
     for i, task_dl_scores in enumerate(dl_scores):
         logger.info("writing deeplift score track for task {}".format(str(i)))
@@ -212,10 +295,8 @@ def main_test(data_config_file=None,
         model = SequenceClassifier(arch_fname=arch_file,
                                    weights_fname=weights_file)
         # extract encoded data in memory
-        logger.info("extracting data from regions..")
-        fasta_extractor = FastaExtractor(genome_fasta)
         logger.info("extracting data in memory")
-        fasta_extractor = FastaExtractor(genome_fasta)
+        fasta_extractor = FastaExtractor(data['genome_fasta'])
         logger.info("extracting test data")
         X_test = fasta_extractor(intervals_test)
         logger.info("Testing the model...")
@@ -225,7 +306,8 @@ def main_test(data_config_file=None,
 
 def main():
     # parse args
-    command_functions = {'train': main_train,
+    command_functions = {'memmap': main_memmap,
+                         'train': main_train,
                          'interpret': main_interpret,
                          'test': main_test}
     command, args = parse_args()

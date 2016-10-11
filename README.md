@@ -2,8 +2,23 @@
 Reimplementing tf binding with simpler, faster, and more stable code.
 
 ## Usage
-I'm in the process of developing a `tfdragonn` command-line interface. The basic idea is to provide a minimal set of commands for extensive model development and interpretation, with bed intervals as the main interface, and minimal usage of data/model config files. Here are examples of what can be done so far:
+The `tfdragonn` package provides a command-line interface with command to process data, train/test model, and interpret data using trained models. To get an overview of the interface run:
 ```
-tfdragonn train --data-config-file examples/hydrogel_data_config.json --prefix example_cmd_line_run
+tfdragonn --help
 ```
-This will train a sequence-only model using the genome fasta and the union of feature bed regions in hydrogel_data_config.json and store output files based on the prefix.
+The available commands are `memmap`, `train`, `test`, and `interpret`. See sections below for example usage of each command.
+
+### Memory mapping raw input data
+The data config file supports `genome_fasta` and `dnase_bigwig` inputs for quick model prototyping. When these inputs are used for training/testing of models, `tfdragonn` will encode them based on the dataset intervals in into arrays that will be in memory throughout training/testing. For large scale data that cannot fit in memory, we first encode each input genome-wide into binary files that are then memory mapped to stream data for model training/testing. The `memmap` command performs genome-wide encoding of every raw input in a data config file and writes a new data config file with the binary inputs. Run this command to encode DNase foldchange bigwigs in 14 celltypes used for the TF binding challenge:
+```
+tfdragonn memmap --data-config-file examples/DNASE_fc_bigwigs.json --memmap-dir ./large_scale_encoding_example --output-file examples/DNASE_fc_memmaped.json
+```
+`examples/DNASE_fc_memmaped.json` is the new data config file with encoded inputs.
+
+### Model training
+
+### Model testing
+
+### Interpreting data with trained models
+
+### Processing raw peak files into intervals and labels

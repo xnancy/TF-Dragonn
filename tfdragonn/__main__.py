@@ -11,6 +11,7 @@ from genomedatalayer.extractors import (
     FastaExtractor, MemmappedBigwigExtractor, MemmappedFastaExtractor
 )
 
+from .datasets import Dataset, parse_data_config_file
 from .intervals import get_tf_predictive_setup, train_test_chr_split 
 
 # setup logging
@@ -87,33 +88,6 @@ def parse_args():
     return command, args
 
 
-def parse_dataset(dataset):
-    """
-    Parses dataset dictionary.
-
-    Parameters
-    ----------
-    dataset : dict
-    """
-    optional_keys = ['region_bed', 'regions', 'labels', 'genome_data_dir', 'genome_fasta']
-    for key in optional_keys:
-        if key not in dataset:
-            dataset[key] = None
-
-    return dataset
-
-
-def parse_data_config_file(data_config_file):
-    """
-    Parses data config file and returns region beds, feature beds, and data files.
-    """
-    data = json.load(open(data_config_file))
-    for dataset_id in data:
-        data[dataset_id] = parse_dataset(data[dataset_id])
-
-    return data
-
-
 def main_memmap(data_config_file=None,
                 memmap_dir=None,
                 output_file=None):
@@ -126,14 +100,20 @@ def main_memmap(data_config_file=None,
     logger.info("Memapping input data in {}...".format(data_config_file))
     for dataset_id, dataset in data.items():
         for input_key in RAW_INPUT_KEYS:
-            raw_input_fname = dataset[input_key]
+            raw_input_fname = getattr(dataset, input_key)
             if raw_input_fname is not None:
                 input_memmap_dir = os.path.join(memmap_dir, ntpath.basename(raw_input_fname))
                 logger.info("Encoding {} in {}...".format(raw_input_fname, input_memmap_dir))
                 extractor = input2memmap_extractor[input_key]
                 extractor.setup_mmap_arrays(raw_input_fname, input_memmap_dir)
-                data[dataset_id][input2memmap_input[input_key]] = input_memmap_dir
-                del data[dataset_id][input_key]
+                # update the dataset in data
+                memmap_dataset_dict = dataset.to_dict()
+                print memmap_dataset_dict
+                del memmap_dataset_dict[input_key]
+                memmap_dataset_dict[input2memmap_input[input_key]] = input_memmap_dir
+                data[dataset_id] = memmap_dataset_dict
+                #data[dataset_id][input2memmap_input[input_key]] = input_memmap_dir
+                #del data[dataset_id][input_key]
                 logger.info("Replaced {}: {} with\n\t\t\t\t\t\t  {}: {} in\n\t\t\t\t\t\t  {} dataset".format(
                     input_key, raw_input_fname, input2memmap_input[input_key], input_memmap_dir, dataset_id))
     # write json with memmaped data

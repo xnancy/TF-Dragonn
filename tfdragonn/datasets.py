@@ -32,7 +32,7 @@ class Dataset(object):
                  dnase_bigwig=None, genome_fasta=None,
                  dnase_data_dir=None, genome_data_dir=None):
         self.feature_beds = feature_beds
-        self.region_bed = region_beds
+        self.region_bed = region_bed
         self.regions = regions
         self.labels = labels
         self.dnase_bigwig = dnase_bigwig
@@ -55,17 +55,6 @@ class Dataset(object):
                 if not key.startswith('__') and not callable(key)}
 
 
-def parse_data_config_file(data_config_file):
-    """
-    Parses data config file and returns region beds, feature beds, and data files.
-    """
-    data = json.load(open(data_config_file), object_pairs_hook=collections.OrderedDict)
-    for dataset_id, dataset in data.items():
-        data[dataset_id] = Dataset(**dataset)
-
-    return data
-
-
 class IntervalDataset(Dataset):
     """
     A Dataset with raw or processed interval files.
@@ -79,7 +68,7 @@ class IntervalDataset(Dataset):
         return self.regions is not None
 
     def __init__(self, **kwargs):
-        super(IntervalDataset, self).__init__(self, **kwargs)
+        super(IntervalDataset, self).__init__(**kwargs)
         if not self.has_valid_intervals:
             raise ValueError("Invalid IntervalDataset: must have either cached intervals or raw intervals!")
 
@@ -95,7 +84,7 @@ class LabeledIntervalDataset(IntervalDataset):
             return self.feature_beds is not None
 
     def __init__(self, **kwargs):
-        super(LabeledIntervalDataset, self).__init__(self, **kwargs)
+        super(LabeledIntervalDataset, self).__init__(**kwargs)
         if not self.has_valid_labels:
             raise ValueError("Invalid LabeledIntervalDataset: must have either labels for regions or feature_beds!")
 
@@ -108,10 +97,30 @@ class OrderedLabeledIntervalDataset(LabeledIntervalDataset):
         return self.labels is not None or isinstance(self.feature_beds, list)
 
     def __init__(self, **kwargs):
-        super(OrderedLabeledIntervalDataset, self).__init__(self, **kwargs)
+        super(OrderedLabeledIntervalDataset, self).__init__(**kwargs)
         if not has_ordered_labels:
             raise ValueError("Invalid OrderedLabeledIntervalDataset: must have either labels for regions or feature_beds list!")
 
+
+def parse_data_config_file(data_config_file):
+    """
+    Parses data config file and returns region beds, feature beds, and data files.
+    """
+    data = json.load(open(data_config_file), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, dataset in data.items():
+        # initialize the appropriate type of Dataset
+        try:
+            data[dataset_id] = OrderedLabeledIntervalDataset(**dataset)
+        except ValueError:
+            try:
+                data[dataset_id] = LabeledIntervalDataset(**dataset)
+            except ValueError:
+                try:
+                    data[dataset_id] = IntervalDataset(**dataset)
+                except ValueError:
+                    data[dataset_id] = Dataset(**dataset)
+
+    return data
 
 class Datasets(object):
 
@@ -121,6 +130,10 @@ class Datasets(object):
         Checks datasets are of the same type.
         """
         return all(type(dataset) == self.dataset_type for dataset in self.datasets)
+
+    @property
+    def has_task_names(self):
+        return type(self.task_names) is list
 
     def __init__(self, dataset_dict, task_names=None):
         self.dataset_ids = dataset_dict.keys()
@@ -135,13 +148,22 @@ class Datasets(object):
             self.check_nonordered_labeled_interval_datasets()
 
     def check_ordered_labeled_interval_datasets(self):
-        pass
+        """
+        checks number of tasks is consistent across datasets.
+        """
+        if self.has_task_names:
+            pass
+        else:
+            pass
 
     def check_nonordered_labeled_interval_datasets(self):
-        assert type(self.task_names) is list, "task_names list is required when feature_beds are provided as a dictionary!"
+        """
+        checks a list of task names is provided and task names in each dataset are a subset of that master list.
+        """
+        assert self.has_task_names, "task_names list is required when feature_beds are provided as a dictionary!"
         task_names = set(self.task_names)
         assert len(task_names) == len(self.task_names), "task names must be unique!"
         for dataset_id, dataset in zip(self.dataset_ids, self.datasets):
             assert type(dataset) is dict
             dataset_task_names = set(dataset.keys())
-            assert dataset_task_names,issubset(task_names), "Tasks in {} are not a subset of task_names!".format(dataset_id)
+            assert dataset_task_names.issubset(task_names), "Tasks in {} are not a subset of task_names!".format(dataset_id)

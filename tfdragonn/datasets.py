@@ -98,7 +98,7 @@ class OrderedLabeledIntervalDataset(LabeledIntervalDataset):
 
     def __init__(self, **kwargs):
         super(OrderedLabeledIntervalDataset, self).__init__(**kwargs)
-        if not has_ordered_labels:
+        if not self.has_ordered_labels:
             raise ValueError("Invalid OrderedLabeledIntervalDataset: must have either labels for regions or feature_beds list!")
 
 

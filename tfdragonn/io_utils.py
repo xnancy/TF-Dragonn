@@ -1,4 +1,5 @@
 import itertools
+import numpy as np
 
 def batch_iter(iterable, batch_size):
     '''iterates in batches.
@@ -11,7 +12,7 @@ def batch_iter(iterable, batch_size):
                 values += (it.next(),)
             yield values
     except StopIteration:
-        # yield remaining values                                                                                                                                                                                                                                                             
+        # yield remaining values
         yield values
 
 
@@ -49,8 +50,8 @@ def generate_array_batches(array, batch_size=128, indefinitely=True):
     if indefinitely:
         batch_iterator = infinite_batch_iter(array, batch_size)
     else:
-        raise RuntimeError("Finite generator in generate_array_batches not implemented!")
-    for array_batch in infinite_batch_iter(array, batch_size):
+        batch_iterator = batch_iter(array, batch_size)
+    for array_batch in batch_iterator:
         yield np.vstack(array_batch)
 
 

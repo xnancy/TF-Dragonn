@@ -9,7 +9,7 @@ config = {
     'setup_requires': [],
     'install_requires': ['numpy>=1.9', 'keras==0.3.3', 'deeplift', 'sklearn', 'future'],
     'dependency_links': ['https://github.com/kundajelab/deeplift/tarball/master#egg=deeplift-0.2'],
-    'scripts': ["scripts/test_batch_generation.py"],
+    'scripts': ["scripts/test_io_utils.py"],
     'entry_points': {'console_scripts': ['tfdragonn = tfdragonn.__main__:main']},
     'name': 'tfdragonn'
 }

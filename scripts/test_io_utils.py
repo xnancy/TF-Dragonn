@@ -152,7 +152,7 @@ def main_sequence_and_label_streaming(data_config_file=None,
         # assert streamed sequences and labels match data in memory 
         assert (X_in_memory[start:stop] - X_batch).sum() == 0
         assert (labels[start:stop] - labels_batch).sum() == 0
-        progbar.update(batch_indx*batch_size)
+        progbar.update(stop)
 
 
 def main_sequences(data_config_file=None,

@@ -1,3 +1,6 @@
+from __future__ import absolute_import, division, print_function
+
+from builtins import zip
 import itertools
 import numpy as np
 
@@ -23,7 +26,7 @@ def infinite_batch_iter(iterable, batch_size):
                       batch_size)
 
 
-def generate_signals_from_intervals(intervals, extractor, batch_size=128, indefinitely=True, batch_array=None):
+def generate_from_intervals(intervals, extractor, batch_size=128, indefinitely=True, batch_array=None):
     """
     Generates signals extracted on interval batches.
     """
@@ -43,7 +46,30 @@ def generate_signals_from_intervals(intervals, extractor, batch_size=128, indefi
             yield extractor(batch_intervals)
 
 
-def generate_array_batches(array, batch_size=128, indefinitely=True):
+def test_extractor_in_generator(intervals, extractor, batch_size=128):
+    """
+    Extracts data in bulk, then in streaming batches and checks its the same data.
+    """
+    from keras.utils.generic_utils import Progbar
+
+    X_in_memory = extractor(intervals)
+    samples_per_epoch = len(intervals)
+    batches_per_epoch = int(samples_per_epoch / batch_size) + 1
+    batch_array = np.zeros((batch_size, 1, 4, intervals[0].length), dtype=np.float32)
+    batch_generator = generate_from_intervals(intervals, extractor, batch_size=batch_size, indefinitely=False, batch_array=batch_array)
+    progbar = Progbar(target=samples_per_epoch)
+    for batch_indx in xrange(1, batches_per_epoch + 1):
+        X_batch  = next(batch_generator)
+        start = (batch_indx-1)*batch_size
+        stop = batch_indx*batch_size
+        if stop > samples_per_epoch:
+            stop = samples_per_epoch
+        # assert streamed sequences and labels match data in memory
+        assert (X_in_memory[start:stop] - X_batch).sum() == 0
+        progbar.update(stop)
+
+
+def generate_from_array(array, batch_size=128, indefinitely=True):
     """
     Generates the array in batches.
     """
@@ -52,14 +78,14 @@ def generate_array_batches(array, batch_size=128, indefinitely=True):
     else:
         batch_iterator = batch_iter(array, batch_size)
     for array_batch in batch_iterator:
-        yield np.vstack(array_batch)
+        yield np.stack(array_batch, axis=0)
 
 
 def generate_from_intervals_and_labels(intervals, labels, extractor, batch_size=128, indefinitely=True, batch_array=None):
-    batch_generator = zip(generate_signals_from_intervals(intervals, extractor,
-                                                          batch_array=batch_array,
-                                                          batch_size=batch_size,
-                                                          indefinitely=indefinitely),
-                          generate_array_batches(labels, batch_size=batch_size, indefinitely=indefinitely))
+    batch_generator = zip(generate_from_intervals(intervals, extractor,
+                                                  batch_array=batch_array,
+                                                  batch_size=batch_size,
+                                                  indefinitely=indefinitely),
+                          generate_from_array(labels, batch_size=batch_size, indefinitely=indefinitely))
     for batch in batch_generator:
         yield batch

@@ -15,79 +15,8 @@ from keras.layers.recurrent import GRU
 from keras import optimizers
 from keras.regularizers import l1
 
+from .io_utils import generate_from_intervals, generate_from_intervals_and_labels
 from .metrics import ClassificationResult
-
-def batch_iter(iterable, batch_size):
-    '''iterates in batches.
-    '''
-    it = iter(iterable)
-    try:
-        while True:
-            values = []
-            for n in xrange(batch_size):
-                values += (it.next(),)
-            yield values
-    except StopIteration:
-        # yield remaining values
-        yield values
-
-
-def infinite_batch_iter(iterable, batch_size):
-    '''iterates in batches indefinitely.
-    '''
-    return batch_iter(itertools.cycle(iterable),
-                      batch_size)
-
-
-def threaded_generator(generator, num_cached=50):
-    import Queue
-    queue = Queue.Queue(maxsize=num_cached)
-    sentinel = object()  # guaranteed unique reference
-
-    # define producer (putting items into queue)
-    def producer():
-        for item in generator:
-            queue.put(item)
-        queue.put(sentinel)
-
-    # start producer (in a background thread)
-    import threading
-    thread = threading.Thread(target=producer)
-    thread.daemon = True
-    thread.start()
-
-    # run as consumer (read items from queue, in current thread)
-    item = queue.get()
-    while item is not sentinel:
-        yield item
-        queue.task_done()
-        item = queue.get()
-
-
-def generate_signals_from_intervals(intervals, extractor, batch_size=128, indefinitely=True):
-    """
-    Generates signals extracted on interval batches.
-    """
-    interval_length = intervals[0].length
-    batch_array = np.zeros((batch_size, 1, 4, interval_length), dtype=np.float32)
-    if indefinitely:
-        batch_iterator = infinite_batch_iter(intervals, batch_size)
-    else:
-        batch_iterator = batch_iter(intervals, batch_size)
-    for batch_intervals in batch_iterator:
-        try:
-            yield extractor(batch_intervals, out=batch_array)
-        except ValueError:
-            yield extractor(batch_intervals)
-
-
-def generate_array_batches(array, batch_size=128):
-    """
-    Generates the array in batches.
-    """
-    for array_batch in infinite_batch_iter(array, batch_size):
-        yield np.vstack(array_batch)
-
 
 def class_weights(y):
     """
@@ -166,7 +95,7 @@ class SequenceClassifier(object):
         else:
             raise RuntimeError("Model initialization requires seq_length and num_tasks or arch/weights files!")
 
-    def compile(self, optimizer='adam', lr=0.001, y=None):
+    def compile(self, optimizer='adam', lr=0.0001, y=None):
         """
         Defines learning parameters and compiles the model.
 
@@ -196,7 +125,7 @@ class SequenceClassifier(object):
         if verbose:
             self.callbacks.append(PrintMetrics(validation_data, self))
         self.model.fit(
-            X, y, batch_size=batch_size, nb_epoch=self.num_epochs,
+            X, y, batch_size=batch_size, nb_epoch=self.num_epochs, shuffle=False,
             validation_data=validation_data,
             callbacks=self.callbacks, verbose=verbose)
 
@@ -235,19 +164,6 @@ class SequenceClassifier(object):
     def predict(self, X, batch_size=128):
         return self.model.predict(X, batch_size=batch_size, verbose=False)
 
-
-class PrintIntervalMetrics(Callback):
-
-        def __init__(self, intervals, y, extractor, sequence_DNN):
-            self.intervals = intervals
-            self.y = y
-            self.extractor = extractor
-            self.sequence_DNN = sequence_DNN
-
-        def on_epoch_end(self, epoch, logs={}):
-            print('\n{}\n'.format(self.sequence_DNN.test(
-                self.intervals, self.y, self.extractor)))
-
     
 class StreamingSequenceClassifier(SequenceClassifier):
 
@@ -255,36 +171,29 @@ class StreamingSequenceClassifier(SequenceClassifier):
               intervals_valid, y_valid, fasta_extractor,
               save_best_model_to_prefix=None,
               early_stopping_metric='auPRC', num_epochs=100,
-              batch_size=128, epoch_size=None,
-              early_stopping_patience=5, verbose=True, reweigh_loss_func=False,
-              use_keras_fit_generator=True):
-        ## TODO: add running loss when not using keras fit generator
+              batch_size=128, epoch_size=100000,
+              early_stopping_patience=5, verbose=True, reweigh_loss_func=False):
+        from keras.utils.generic_utils import Progbar
         if reweigh_loss_func:
             task_weights = np.array([class_weights(y[:, i]) for i in range(y.shape[1])])
             loss_func = get_weighted_binary_crossentropy(task_weights[:, 0], task_weights[:, 1])
             self.model.compile(optimizer='adam', loss=loss_func)
         # define generators
-        training_generator = zip(generate_signals_from_intervals(intervals_train, fasta_extractor, batch_size=batch_size),
-                                 generate_array_batches(y_train, batch_size=batch_size))
-        if not use_keras_fit_generator: # thread the generator with caching
-            from keras.utils.generic_utils import Progbar
-            training_generator = threaded_generator(training_generator, num_cached=10)
-        # define callbacks and fit
+        batch_array = np.zeros((batch_size, 1, 4, intervals_train[0].length), dtype=np.float32)
+        training_generator = generate_from_intervals_and_labels(intervals_train, y_train, fasta_extractor,
+                                                                batch_size=128, indefinitely=True, batch_array=batch_array)
         valid_metrics = []
         best_metric = np.inf if early_stopping_metric == 'Loss' else -np.inf
         samples_per_epoch = len(y_train) if epoch_size is None else epoch_size
         batches_per_epoch = int(samples_per_epoch / batch_size)
+        samples_per_epoch = batch_size * batches_per_epoch # leave out leftover examples for next epoch
         for epoch in range(1, num_epochs + 1):
-            if use_keras_fit_generator:
-                self.model.fit_generator(training_generator,
-                                         samples_per_epoch=samples_per_epoch,
-                                         nb_epoch=1)
-            else: # generate and make updates batch by batch
-                progbar = Progbar(target=samples_per_epoch)
-                for batch_indxs in range(1, batches_per_epoch + 1):
-                    x, y = next(training_generator)
-                    self.model.train_on_batch(x, y)
-                    progbar.update(batch_indxs*batch_size)
+            progbar = Progbar(target=samples_per_epoch)
+            for batch_indxs in xrange(1, batches_per_epoch + 1):
+                x, y = next(training_generator)
+                batch_loss = self.model.train_on_batch(x, y)
+                progbar.update(batch_indxs*batch_size, values=[("loss", sum(batch_loss)/len(batch_loss))])
+
             epoch_valid_metrics = self.test(intervals_valid, y_valid, fasta_extractor)
             valid_metrics.append(epoch_valid_metrics)
             if verbose:
@@ -314,11 +223,18 @@ class StreamingSequenceClassifier(SequenceClassifier):
         """
         Generates data and returns a single 2d array with predictions.
         """
-        generator = generate_signals_from_intervals(
-            intervals, fasta_extractor, indefinitely=False)
+        generator = generate_from_intervals(
+            intervals, fasta_extractor, indefinitely=False, batch_size=batch_size)
         predictions = [np.vstack(self.model.predict_on_batch(batch))
                        for batch in generator]
         return np.vstack(predictions)
+
+    def compare_predict_and_stream_predict(self, intervals, fasta_extractor, batch_size=128):
+        X = fasta_extractor(intervals)
+        predictions = super(StreamingSequenceClassifier, self).predict(X)
+        stream_predictions = self.predict(intervals, fasta_extractor, batch_size=batch_size)
+        diff = (predictions - stream_predictions).sum()
+        assert diff == 0, "difference is {}".format(diff)
 
     def test(self, intervals, y, fasta_extractor):
         predictions = self.predict(intervals, fasta_extractor)

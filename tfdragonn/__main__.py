@@ -6,6 +6,7 @@ import logging
 import numpy as np
 import os
 from pybedtools import BedTool
+from sklearn.utils import shuffle
 
 from genomedatalayer.extractors import (
     FastaExtractor, MemmappedBigwigExtractor, MemmappedFastaExtractor
@@ -129,40 +130,39 @@ def main_train(data_config_file=None,
                weights_file=None):
     # get matched region beds and feature/tf beds
     logger.info("parsing data config file..")
-    data = parse_data_config_file(data_config_file)
-    #inputs, datasets = parse_data_config_file(data_config_file)
+    datasets = parse_data_config_file(data_config_file)
     # get regions and labels, split into train/test
-    """
     if len(datasets) > 1:
         raise RuntimeError("Data configurations with more than one datasets are not supported yet!")
     else:
-        data = datasets[0]
-    """
+        data = datasets[datasets.keys()[0]]
     if os.path.isfile("{}.intervals.bed".format(prefix)) and os.path.isfile("{}.labels.npy".format(prefix)):
         logger.info("loading intervals from {}.intervals.bed".format(prefix))
         regions = BedTool("{}.intervals.bed".format(prefix))
         logger.info("loading labels from {}.labels.npy".format(prefix))
         labels = np.load("{}.labels.npy".format(prefix))
-    elif data['regions'] is not None and data['labels'] is not None:
-        if os.path.isfile(data['regions']) and os.path.isfile(data['labels']):
-            logger.info("loading intervals from {}".format(data['regions']))
-            regions = BedTool(data['regions'])
-            logger.info("loading labels from {}".format(data['labels']))
-            labels = np.load(data['labels'])
+    elif data.regions is not None and data.labels is not None:
+        if os.path.isfile(data.regions) and os.path.isfile(data.labels):
+            logger.info("loading intervals from {}".format(data.regions))
+            regions = BedTool(data.regions)
+            logger.info("loading labels from {}".format(data.labels))
+            labels = np.load(data.labels)
     else:
         logger.info("getting regions and labels")
-        regions, labels = get_tf_predictive_setup(data['feature_beds'], region_bedtool=data['region_bed'],
+        regions, labels = get_tf_predictive_setup(data.feature_beds, region_bedtool=data.region_bed,
                                                   bin_size=200, flank_size=400, stride=200,
                                                   filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
                                                   save_to_prefix=prefix)
     intervals_train, intervals_test, y_train, y_test = train_test_chr_split(regions, labels, ["chr1", "chr2"])
+    # shuffle training intervals and labels
+    intervals_train, y_train = shuffle(intervals_train, y_train, random_state=0)
     interval_length = intervals_train[0].length
     num_tasks = y_train.shape[1]
     architecture_parameters = {'num_filters': (35, 35, 35),
                                'conv_width': (20, 20, 20),
                                'dropout': 0.1}
-    if data['genome_data_dir'] is not None: # use a streaming model
-        fasta_extractor = MemmappedFastaExtractor(data['genome_data_dir'])
+    if data.genome_data_dir is not None: # use a streaming model
+        fasta_extractor = MemmappedFastaExtractor(data.genome_data_dir)
         logger.info("Initializing a StreamingSequenceClassifer")
         model = StreamingSequenceClassifier(interval_length, num_tasks, **architecture_parameters)
         logger.info("Compiling StreamingSequenceClassifer..")
@@ -172,7 +172,7 @@ def main_train(data_config_file=None,
                     save_best_model_to_prefix=prefix)
     else: # extract encoded data in memory
         logger.info("extracting data in memory")
-        fasta_extractor = FastaExtractor(data['genome_fasta'])
+        fasta_extractor = FastaExtractor(data.genome_fasta)
         logger.info("extracting test data")
         X_test = fasta_extractor(intervals_test)
         logger.info("extracting training data")

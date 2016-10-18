@@ -6,7 +6,7 @@ The `tfdragonn` package provides a command-line interface with command to proces
 ```
 tfdragonn --help
 ```
-The available commands are `memmap`, `train`, `test`, and `interpret`. See sections below for example usage of each command.
+The available commands are `memmap`, `label_regions`, `train`, `test`, and `interpret`. See sections below for example usage of each command.
 
 ### Memory mapping raw input data
 The data config file supports `genome_fasta` and `dnase_bigwig` inputs for quick model prototyping. When these inputs are used for training/testing of models, `tfdragonn` will encode them based on the dataset intervals in into arrays that will be in memory throughout training/testing. For large scale data that cannot fit in memory, we first encode each input genome-wide into binary files that are then memory mapped to stream data for model training/testing. The `memmap` command performs genome-wide encoding of every raw input in a data config file and writes a new data config file with the binary inputs. Run this command to encode DNase foldchange bigwigs in 14 celltypes used for the TF binding challenge:

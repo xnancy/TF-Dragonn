@@ -103,8 +103,8 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
         Can be any genome name supported by pybedtools.
     """
     # initialize feature bedtools
-    true_feature_bedtools = [BedTool(true_feature_bedtool)
-                             for true_feature_bedtool in true_feature_bedtools]
+    true_feature_bedtools = [BedTool(bedtool) for bedtool in true_feature_bedtools
+                             if bedtool is not None]
     # sanity checks
     if ambiguous_feature_bedtools is not None:
         assert len(ambiguous_feature_bedtools) == len(true_feature_bedtools)
@@ -114,7 +114,8 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
     if region_bedtool is not None:
         bins = bin_bed(BedTool(region_bedtool), bin_size=bin_size, stride=stride)
     else: # use union of true peak bedtools
-        region_bedtool = BedTool.cat(*true_feature_bedtools, postmerge=True, force_truncate=True)
+        bedtools_to_merge = [bedtool for bedtool in true_feature_bedtools if bedtool is not None]
+        region_bedtool = BedTool.cat(*bedtools_to_merge, postmerge=True, force_truncate=True)
         bins = bin_bed(region_bedtool, bin_size=bin_size, stride=stride)
     # filter bins to chr1-22,X,Y
     chrom_list = ["chr%i" % (i) for i in range(1, 23)]

@@ -173,7 +173,11 @@ class StreamingSequenceClassifier(SequenceClassifier):
               early_stopping_metric='auPRC', num_epochs=100,
               batch_size=128, epoch_size=100000,
               early_stopping_patience=5, verbose=True, reweigh_loss_func=False):
+        import os
+        import psutil
         from keras.utils.generic_utils import Progbar
+
+        process = psutil.Process(os.getpid())
         if reweigh_loss_func:
             task_weights = np.array([class_weights(y[:, i]) for i in range(y.shape[1])])
             loss_func = get_weighted_binary_crossentropy(task_weights[:, 0], task_weights[:, 1])
@@ -192,7 +196,9 @@ class StreamingSequenceClassifier(SequenceClassifier):
             for batch_indxs in xrange(1, batches_per_epoch + 1):
                 x, y = next(training_generator)
                 batch_loss = self.model.train_on_batch(x, y)
-                progbar.update(batch_indxs*batch_size, values=[("loss", sum(batch_loss)/len(batch_loss))])
+                rss_minus_shr_memory = (process.memory_info().rss -  process.memory_info().shared)  / 10**6
+                progbar.update(batch_indxs*batch_size,
+                               values=[("loss", sum(batch_loss)/len(batch_loss)), ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
 
             epoch_valid_metrics = self.test(intervals_valid, y_valid, fasta_extractor)
             valid_metrics.append(epoch_valid_metrics)

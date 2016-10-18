@@ -15,6 +15,12 @@ tfdragonn memmap --data-config-file examples/DNASE_fc_bigwigs.json --memmap-dir 
 ```
 `examples/DNASE_fc_memmaped.json` is the new data config file with encoded inputs.
 
+### Processing raw peak files into labeled regions
+The `tfdragonn label_regions` command provides a simple way to process datasets with raw peaks files into sets of regions of fixed length and the corresponding labels. `examples/TF_peaks_and_memmaped_fasta_DNASE_training.json` is an example config file with all of the reproducible TF peak data in the TF binding challenge. We process these peaks into pairs of regions and label by running:
+```
+tfdragonn label_regions --data-config-file examples/TF_peaks_and_memmaped_fasta_DNASE_training.json --n-jobs 16 --output-file examples/regions_and_labels_for_TF_peaks_and_memmaped_fasta_DNASE_training.json --prefix /mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/TF_peaks
+```
+The new data config file, `examples/regions_and_labels_for_TF_peaks_and_memmaped_fasta_DNASE_training.json`, replaces peak files in `examples/TF_peaks_and_memmaped_fasta_DNASE_training.json` with processed regions and labels files. We are now ready to get started with model development and interpretation.
 ### Model training
 
 ### Model testing

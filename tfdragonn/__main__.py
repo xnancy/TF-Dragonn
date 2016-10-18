@@ -65,6 +65,13 @@ def parse_args():
                                          help='This command memory maps raw inputs in'+
                                               'the data config file for use with streaming models,'+
                                               'and writes a new data config with memmaped inputs. ')
+    label_regions_parser = subparsers.add_parser('label_regions',
+                                                 parents=[data_config_parser,
+                                                          multiprocessing_parser,
+                                                          output_file_parser,
+                                                          prefix_parser],
+                                         help='Generates fixed length regions and their labels for each dataset.'
+                                              'Writes a new data config file with regions and labels files.')
     train_parser = subparsers.add_parser('train',
                                          parents=[data_config_parser,
                                                   multiprocessing_parser,
@@ -109,17 +116,49 @@ def main_memmap(data_config_file=None,
                 extractor.setup_mmap_arrays(raw_input_fname, input_memmap_dir)
                 # update the dataset in data
                 memmap_dataset_dict = dataset.to_dict()
-                print memmap_dataset_dict
                 del memmap_dataset_dict[input_key]
                 memmap_dataset_dict[input2memmap_input[input_key]] = input_memmap_dir
                 data[dataset_id] = memmap_dataset_dict
-                #data[dataset_id][input2memmap_input[input_key]] = input_memmap_dir
-                #del data[dataset_id][input_key]
                 logger.info("Replaced {}: {} with\n\t\t\t\t\t\t  {}: {} in\n\t\t\t\t\t\t  {} dataset".format(
                     input_key, raw_input_fname, input2memmap_input[input_key], input_memmap_dir, dataset_id))
     # write json with memmaped data
     json.dump(data, open(output_file, "w"), indent=4)
     logger.info("Wrote memaped data config file to {}.".format(output_file))
+    logger.info("Done!")
+
+def main_label_regions(data_config_file=None,
+                       n_jobs=None,
+                       prefix=None,
+                       output_file=None):
+    """
+    Generates regions and labels files for each dataset.
+    Writes new data config file with the generated files.
+    """
+    data = parse_data_config_file(data_config_file)
+    data_dict = data.to_dict()
+    logger.info("Generating regions and labels for datasets in {}...".format(data_config_file))
+    for dataset_id, dataset in data:
+        logger.info("Generating regions and labels for dataset {}...".format(dataset_id))
+        dataset_prefix = "{}.{}".format(prefix, dataset_id)
+        if os.path.isfile("{}.intervals.bed".format(dataset_prefix)) and os.path.isfile("{}.labels.npy".format(dataset_prefix)):
+            logger.info("Regions file {0}.intervals.bed and labels file {0}.labels.npy already exists. skipping dataset {1}!".format(dataset_prefix, dataset_id))
+        else:
+            regions, labels = get_tf_predictive_setup(dataset.feature_beds, region_bedtool=dataset.region_bed,
+                                                      bin_size=200, flank_size=400, stride=200,
+                                                      filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
+                                                      save_to_prefix=dataset_prefix)
+            logger.info("Saved regions to {0}.intervals.bed and labels to {0}.labels.npy".format(dataset_prefix))
+        # update the data dictionary
+        labeled_regions_dataset_dict = dataset.to_dict()
+        del labeled_regions_dataset_dict["feature_beds"]
+        del labeled_regions_dataset_dict["region_bed"]
+        labeled_regions_dataset_dict["regions"] = os.path.abspath("{}.intervals.bed".format(dataset_prefix))
+        labeled_regions_dataset_dict["labels"] = os.path.abspath("{}.labels.npy".format(dataset_prefix))
+        data_dict[dataset_id] = labeled_regions_dataset_dict
+        logger.info("Replaced bed files with regions and labels files for dataset {}.".format(dataset_id))
+    # write json with regions and labels files
+    json.dump(data_dict, open(output_file, "w"), indent=4)
+    logger.info("Wrote new data config file to {}.".format(output_file))
     logger.info("Done!")
 
 
@@ -287,12 +326,13 @@ def main_test(data_config_file=None,
 def main():
     # parse args
     command_functions = {'memmap': main_memmap,
+                         'label_regions': main_label_regions,
                          'train': main_train,
                          'interpret': main_interpret,
                          'test': main_test}
     command, args = parse_args()
-    # perform theano/keras import
-    global SequenceClassifier, StreamingSequenceClassifier
-    from .models import SequenceClassifier, StreamingSequenceClassifier
+    if command in ['train', 'interpret', 'test']: # perform theano/keras import
+        global SequenceClassifier, StreamingSequenceClassifier
+        from .models import SequenceClassifier, StreamingSequenceClassifier
     # run command
     command_functions[command](**args)

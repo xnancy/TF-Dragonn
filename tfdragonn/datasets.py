@@ -1,3 +1,4 @@
+from builtins import zip
 import collections
 import inspect
 import json
@@ -102,27 +103,10 @@ class OrderedLabeledIntervalDataset(LabeledIntervalDataset):
             raise ValueError("Invalid OrderedLabeledIntervalDataset: must have either labels for regions or feature_beds list!")
 
 
-def parse_data_config_file(data_config_file):
-    """
-    Parses data config file and returns region beds, feature beds, and data files.
-    """
-    data = json.load(open(data_config_file), object_pairs_hook=collections.OrderedDict)
-    for dataset_id, dataset in data.items():
-        # initialize the appropriate type of Dataset
-        try:
-            data[dataset_id] = OrderedLabeledIntervalDataset(**dataset)
-        except ValueError:
-            try:
-                data[dataset_id] = LabeledIntervalDataset(**dataset)
-            except ValueError:
-                try:
-                    data[dataset_id] = IntervalDataset(**dataset)
-                except ValueError:
-                    data[dataset_id] = Dataset(**dataset)
-
-    return data
-
 class Datasets(object):
+
+    def __iter__(self):
+        return zip(self.dataset_ids, self.datasets)
 
     @property
     def has_consistent_datasets(self):
@@ -137,15 +121,16 @@ class Datasets(object):
 
     def __init__(self, dataset_dict, task_names=None):
         self.dataset_ids = dataset_dict.keys()
-        self.datasets = dataset_dict.items()
+        self.datasets = dataset_dict.values()
         self.task_names = task_names
-        self.dataset_type = type(datasets[0])
+        self.dataset_type = type(self.datasets[0])
         if not self.has_consistent_datasets:
             raise ValueError("Datasets are inconsistent: multiple dataset types are not allowed in the same config file!")
         if self.dataset_type is OrderedLabeledIntervalDataset:
             self.check_ordered_labeled_interval_datasets()
         elif self.dataset_type is LabeledIntervalDataset:
             self.check_nonordered_labeled_interval_datasets()
+            self.convert_to_ordered_labeled_interval_datasets()
 
     def check_ordered_labeled_interval_datasets(self):
         """
@@ -163,7 +148,50 @@ class Datasets(object):
         assert self.has_task_names, "task_names list is required when feature_beds are provided as a dictionary!"
         task_names = set(self.task_names)
         assert len(task_names) == len(self.task_names), "task names must be unique!"
-        for dataset_id, dataset in zip(self.dataset_ids, self.datasets):
-            assert type(dataset) is dict
-            dataset_task_names = set(dataset.keys())
-            assert dataset_task_names.issubset(task_names), "Tasks in {} are not a subset of task_names!".format(dataset_id)
+        for dataset_id, dataset in self:
+            assert type(dataset.feature_beds) is collections.OrderedDict, "feature beds in dataset {} are not a dictionary:\n{}".format(dataset_id, dataset.feature_beds)
+            dataset_task_names = set(dataset.feature_beds.keys())
+            assert dataset_task_names.issubset(task_names), "Tasks {} in {} are not in task_names!".format(dataset_task_names - task_names, dataset_id)
+
+    def convert_to_ordered_labeled_interval_datasets(self):
+        """
+        Converts dictionaries of feature beds to uniformly ordered lists of feature beds.
+        """
+        for i, (dataset_id, dataset) in enumerate(self):
+            feature_beds_list = []
+            for task_name in self.task_names:
+                feature_beds_list.append(dataset.feature_beds[task_name] if task_name in dataset.feature_beds.keys() else None)
+            self.datasets[i].feature_beds = feature_beds_list
+
+    def to_dict(self):
+        datasets_dict = collections.OrderedDict()
+        datasets_dict["task_names"] = self.task_names
+        for dataset_id, dataset in self:
+            datasets_dict[dataset_id] = dataset.to_dict()
+
+        return datasets_dict
+
+
+def parse_data_config_file(data_config_file):
+    """
+    Parses data config file and returns region beds, feature beds, and data files.
+    """
+    data = json.load(open(data_config_file), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, dataset in data.items():
+        if dataset_id == "task_names":
+            task_names = dataset
+            del data["task_names"]
+            continue
+        # initialize the appropriate type of Dataset
+        try:
+            data[dataset_id] = OrderedLabeledIntervalDataset(**dataset)
+        except ValueError:
+            try:
+                data[dataset_id] = LabeledIntervalDataset(**dataset)
+            except ValueError:
+                try:
+                    data[dataset_id] = IntervalDataset(**dataset)
+                except ValueError:
+                    data[dataset_id] = Dataset(**dataset)
+
+    return Datasets(data, task_names)

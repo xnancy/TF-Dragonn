@@ -10,8 +10,14 @@ def bed_intersection_labels(region_bedtool, feature_bedtool, f=0.5, F=0.5, e=Tru
     """
     region_bedtool = BedTool(region_bedtool)
     if feature_bedtool is not None:
-        overlap_counts = [interval.count for interval in
-                          region_bedtool.intersect(BedTool(feature_bedtool), c=True, f=f, F=F, e=e, **kwargs)]
+        try:
+            overlap_counts = [interval.count for interval in
+                              region_bedtool.intersect(BedTool(feature_bedtool), c=True, f=f, F=F, e=e, **kwargs)]
+        except: # handle unexpected field numbers in feature bedtool by truncating it to bed3
+            feature_df = BedTool(feature_bedtool).to_dataframe()
+            feature_bedtool = BedTool.from_dataframe(feature_df.iloc[:,[0,1,2]])
+            overlap_counts = [interval.count for interval in
+                              region_bedtool.intersect(feature_bedtool, c=True, f=f, F=F, e=e, **kwargs)]
         labels = np.array(overlap_counts) > 0
         return labels.astype(int)[:, np.newaxis]
     else:

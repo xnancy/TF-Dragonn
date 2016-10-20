@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import argparse
+import collections
 import json
 import logging
 import numpy as np
@@ -170,45 +171,76 @@ def main_train(data_config_file=None,
     # get matched region beds and feature/tf beds
     logger.info("parsing data config file..")
     datasets = parse_data_config_file(data_config_file)
-    # get regions and labels, split into train/test
-    if len(datasets) > 1:
-        raise RuntimeError("Data configurations with more than one datasets are not supported yet!")
-    else:
-        data = datasets[datasets.keys()[0]]
-    if os.path.isfile("{}.intervals.bed".format(prefix)) and os.path.isfile("{}.labels.npy".format(prefix)):
-        logger.info("loading intervals from {}.intervals.bed".format(prefix))
-        regions = BedTool("{}.intervals.bed".format(prefix))
-        logger.info("loading labels from {}.labels.npy".format(prefix))
-        labels = np.load("{}.labels.npy".format(prefix))
-    elif data.regions is not None and data.labels is not None:
-        if os.path.isfile(data.regions) and os.path.isfile(data.labels):
-            logger.info("loading intervals from {}".format(data.regions))
-            regions = BedTool(data.regions)
-            logger.info("loading labels from {}".format(data.labels))
-            labels = np.load(data.labels)
-    else:
-        logger.info("getting regions and labels")
-        regions, labels = get_tf_predictive_setup(data.feature_beds, region_bedtool=data.region_bed,
-                                                  bin_size=200, flank_size=400, stride=200,
-                                                  filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
-                                                  save_to_prefix=prefix)
-    intervals_train, intervals_test, y_train, y_test = train_test_chr_split(regions, labels, ["chr1", "chr2"])
-    # shuffle training intervals and labels
-    intervals_train, y_train = shuffle(intervals_train, y_train, random_state=0)
-    interval_length = intervals_train[0].length
-    num_tasks = y_train.shape[1]
-    architecture_parameters = {'num_filters': (35, 35, 35),
-                               'conv_width': (20, 20, 20),
-                               'dropout': 0.1}
-    if data.genome_data_dir is not None: # use a streaming model
-        fasta_extractor = MemmappedFastaExtractor(data.genome_data_dir)
-        logger.info("Initializing a StreamingSequenceClassifer")
-        model = StreamingSequenceClassifier(interval_length, num_tasks, **architecture_parameters)
-        logger.info("Compiling StreamingSequenceClassifer..")
+    # get lists of regions and labels
+    if datasets.include_regions and datasets.include_labels:
+        dataset2regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
+                                      for dataset_id, dataset in datasets}
+    else: ## TODO: call main_label_regions, continue with output data config file
+        raise RuntimeError("data config file doesnt include regions and labels for each dataset. Run the label_regions command first!")
+    # split regions and labels into train and test, shuffle the training data
+    logger.info("Splitting regions and labels into train and test subsets and shuffling train subset...")
+    dataset2train_regions_and_labels = collections.OrderedDict()
+    dataset2test_regions_and_labels = collections.OrderedDict()
+    total_training_examples = [0] # total examples in each dataset
+    for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
+        regions_train, regions_test, y_train, y_test = train_test_chr_split(regions, labels, ["chr1", "chr2"])
+        regions_train, y_train = shuffle(regions_train, y_train, random_state=0)
+        dataset2train_regions_and_labels[dataset_id] = (regions_train, y_train)
+        dataset2test_regions_and_labels[dataset_id] = (regions_test, y_test)
+        total_training_examples.append(len(y_train))
+    # set up the architecture
+    interval_length = dataset2train_regions_and_labels.values()[0][0][0].length
+    num_tasks = dataset2train_regions_and_labels.values()[0][1].shape[1]
+    y_train = np.zeros((sum(total_training_examples), num_tasks))
+    cumsum_total_training_examples = np.cumsum(total_training_examples)
+    for i, (start_indx, end_indx) in enumerate(zip(cumsum_total_training_examples, cumsum_total_training_examples[1:])):
+        y_train[start_indx:end_indx] = dataset2train_regions_and_labels.values()[i][1]
+    seq_architecture_parameters = {'num_filters': (55, 75, 95),
+                                   'conv_width': (20, 20, 20),
+                                   'dropout': 0.1}
+    seq_and_dnase_architecture_parameters = {}
+    if datasets.memmaped:
+        sequence_input = False
+        dnase_input = False
+        dataset2extractors = {dataset_id: [] for dataset_id, _ in datasets}
+        if datasets.memmaped_fasta:
+            sequence_input = True
+            # write non redundant mapping from data_dir to extractor
+            genome_data_dir2fasta_extractor = {}
+            for dataset_id, dataset in datasets:
+                if dataset.genome_data_dir not in genome_data_dir2fasta_extractor:
+                    genome_data_dir2fasta_extractor[dataset.genome_data_dir] = MemmappedFastaExtractor(dataset.genome_data_dir)
+                dataset2extractors[dataset_id].append(genome_data_dir2fasta_extractor[dataset.genome_data_dir])
+            logger.info("Found memmapped fastas, initialized memmaped fasta extractors")
+        if datasets.memmaped_dnase:
+            dnase_input = True
+            # write non redundant mapping from data_dir to extractor
+            dnase_data_dir2bigwig_extractor = {}
+            for dataset_id, dataset in datasets:
+                if dataset.dnase_data_dir not in dnase_data_dir2bigwig_extractor:
+                    dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir] = MemmappedBigwigExtractor(dataset.dnase_data_dir)
+                dataset2extractors[dataset_id].append(dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir])
+            logger.info("Found memmapped dnase bigwigs, initialized memmaped bigwig extractors")
+        # get appropriate model class
+        if sequence_input and dnase_input:
+            model_class = StreamingSequenceAndDnaseClassifier
+            architecture_parameters = seq_and_dnase_architecture_parameters
+        elif sequence_input and not dnase_input:
+            model_class = StreamingSequenceClassifier
+            architecture_parameters = seq_architecture_parameters
+        else:
+            raise RuntimeError("Unsupported combination of inputs. Available models support either sequence-only or sequence+dnase!")
+        # Initialize, compile, and train
+        logger.info("Initializing a {}".format(model_class))
+        model = model_class(interval_length, num_tasks, **architecture_parameters)
+        logger.info("Compiling {}..".format(model_class))
         model.compile(y=y_train)
         logger.info("Starting to train with streaming data..")
-        model.train(intervals_train, y_train, intervals_test, y_test, fasta_extractor,
-                    save_best_model_to_prefix=prefix)
+        #model.train(intervals_train, y_train, intervals_test, y_test, fasta_extractor,
+        #            save_best_model_to_prefix=prefix)
+        model.train_on_multiple_datasets(
+            dataset2train_regions_and_labels, dataset2test_regions_and_labels, dataset2extractors,
+            task_names=datasets.task_names, save_best_model_to_prefix=prefix)
     else: # extract encoded data in memory
         logger.info("extracting data in memory")
         fasta_extractor = FastaExtractor(data.genome_fasta)
@@ -332,7 +364,7 @@ def main():
                          'test': main_test}
     command, args = parse_args()
     if command in ['train', 'interpret', 'test']: # perform theano/keras import
-        global SequenceClassifier, StreamingSequenceClassifier
-        from .models import SequenceClassifier, StreamingSequenceClassifier
+        global SequenceClassifier, StreamingSequenceClassifier, StreamingSequenceAndDnaseClassifier
+        from .models import SequenceClassifier, StreamingSequenceClassifier, StreamingSequenceAndDnaseClassifier
     # run command
     command_functions[command](**args)

@@ -23,10 +23,18 @@ class Dataset(object):
         return self.genome_fasta is not None and self.genome_data_dir is not None
 
     @property
-    def is_memmaped(self):
+    def memmaped(self):
         return all([self.dnase_data_dir is not None or self.genome_data_dir is not None,
                     self.dnase_bigwig is None,
                     self.genome_fasta is None])
+
+    @property
+    def memmaped_fasta(self):
+        return self.genome_data_dir is not None
+
+    @property
+    def memmaped_dnase(self):
+        return self.dnase_data_dir is not None
 
     def __init__(self, feature_beds=None, region_bed=None,
                  regions=None, labels=None,
@@ -119,6 +127,26 @@ class Datasets(object):
     def has_task_names(self):
         return type(self.task_names) is list
 
+    @property
+    def include_regions(self):
+        return all(dataset.regions is not None for dataset in self.datasets)
+
+    @property
+    def include_labels(self):
+        return all(dataset.labels is not None for dataset in self.datasets)
+
+    @property
+    def memmaped(self):
+        return all(dataset.memmaped for dataset in self.datasets)
+
+    @property
+    def memmaped_fasta(self):
+        return all(dataset.genome_data_dir is not None for dataset in self.datasets)
+
+    @property
+    def memmaped_dnase(self):
+        return all(dataset.dnase_data_dir is not None for dataset in self.datasets)
+
     def __init__(self, dataset_dict, task_names=None):
         self.dataset_ids = dataset_dict.keys()
         self.datasets = dataset_dict.values()
@@ -177,6 +205,7 @@ def parse_data_config_file(data_config_file):
     Parses data config file and returns region beds, feature beds, and data files.
     """
     data = json.load(open(data_config_file), object_pairs_hook=collections.OrderedDict)
+    task_names = None
     for dataset_id, dataset in data.items():
         if dataset_id == "task_names":
             task_names = dataset

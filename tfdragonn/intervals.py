@@ -21,7 +21,7 @@ def bed_intersection_labels(region_bedtool, feature_bedtool, f=0.5, F=0.5, e=Tru
         labels = np.array(overlap_counts) > 0
         return labels.astype(int)[:, np.newaxis]
     else:
-        return -1 * np.ones((region_bedtool.count(), 1))
+        return (-1 * np.ones((region_bedtool.count(), 1))).astype(int)
 
 
 def multibed_intersection_labels(region_bedtool, feature_bedtools, f=0.5, F=0.5, e=True, **kwargs):
@@ -109,8 +109,8 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
         Can be any genome name supported by pybedtools.
     """
     # initialize feature bedtools
-    true_feature_bedtools = [BedTool(bedtool) for bedtool in true_feature_bedtools
-                             if bedtool is not None]
+    true_feature_bedtools = [BedTool(bedtool) if bedtool is not None else None
+                             for bedtool in true_feature_bedtools]
     # sanity checks
     if ambiguous_feature_bedtools is not None:
         assert len(ambiguous_feature_bedtools) == len(true_feature_bedtools)
@@ -139,9 +139,10 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
             true_labels_list.append(true_labels)
     elif n_jobs > 1: # multiprocess bed intersections
         # save feature bedtools in temp files. Note: not necessary when inputs are filnames
-        true_feature_bedtools = [bedtool.saveas() for bedtool in true_feature_bedtools]
-        true_labels_list = Parallel(n_jobs=n_jobs)(delayed(bed_intersection_labels)(bins.fn, bedtool.fn)
-                                                   for bedtool in true_feature_bedtools)
+        #true_feature_bedtools = [bedtool.saveas() for bedtool in true_feature_bedtools]
+        true_feature_fnames = [bedtool.fn if bedtool is not None else None for bedtool in true_feature_bedtools]
+        true_labels_list = Parallel(n_jobs=n_jobs)(delayed(bed_intersection_labels)(bins.fn, fname)
+                                                   for fname in true_feature_fnames)
     true_labels = np.concatenate(true_labels_list, axis=1)
     bins_and_flanks = bins.slop(b=flank_size)
     if filter_flank_overlaps:
@@ -177,6 +178,7 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
         labels_fname = "%s.labels.npy" % (save_to_prefix)
         bins_and_flanks = bins_and_flanks.saveas().moveto(intervals_fname)
         np.save(labels_fname, true_labels)
+
     return bins_and_flanks, true_labels
 
 

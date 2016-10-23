@@ -14,7 +14,7 @@ from genomedatalayer.extractors import (
 )
 
 from .datasets import Dataset, parse_data_config_file
-from .intervals import get_tf_predictive_setup, train_test_chr_split 
+from .intervals import get_tf_predictive_setup, train_test_chr_split
 
 # setup logging
 log_formatter = \
@@ -57,7 +57,7 @@ def parse_args():
     memmap_dir_parser = argparse.ArgumentParser(add_help=False)
     memmap_dir_parser.add_argument('--memmap-dir', type=str, required=True,
                                help='directories with memmaped data are created in this directory.')
-    # define commands 
+    # define commands
     subparsers = parser.add_subparsers(help='tf-dragonn command help', dest='command')
     memmap_parser = subparsers.add_parser('memmap',
                                          parents=[data_config_parser,
@@ -106,8 +106,9 @@ def main_memmap(data_config_file=None,
     """
     import ntpath
     data = parse_data_config_file(data_config_file)
+    data_dict = data.to_dict()
     logger.info("Memapping input data in {}...".format(data_config_file))
-    for dataset_id, dataset in data.items():
+    for dataset_id, dataset in data:
         for input_key in RAW_INPUT_KEYS:
             raw_input_fname = getattr(dataset, input_key)
             if raw_input_fname is not None:
@@ -119,11 +120,11 @@ def main_memmap(data_config_file=None,
                 memmap_dataset_dict = dataset.to_dict()
                 del memmap_dataset_dict[input_key]
                 memmap_dataset_dict[input2memmap_input[input_key]] = input_memmap_dir
-                data[dataset_id] = memmap_dataset_dict
+                data_dict[dataset_id] = memmap_dataset_dict
                 logger.info("Replaced {}: {} with\n\t\t\t\t\t\t  {}: {} in\n\t\t\t\t\t\t  {} dataset".format(
                     input_key, raw_input_fname, input2memmap_input[input_key], input_memmap_dir, dataset_id))
     # write json with memmaped data
-    json.dump(data, open(output_file, "w"), indent=4)
+    json.dump(data_dict, open(output_file, "w"), indent=4)
     logger.info("Wrote memaped data config file to {}.".format(output_file))
     logger.info("Done!")
 

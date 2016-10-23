@@ -218,7 +218,8 @@ def main_train(data_config_file=None,
             dnase_data_dir2bigwig_extractor = {}
             for dataset_id, dataset in datasets:
                 if dataset.dnase_data_dir not in dnase_data_dir2bigwig_extractor:
-                    dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir] = MemmappedBigwigExtractor(dataset.dnase_data_dir)
+                    dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir] = MemmappedBigwigExtractor(
+                        dataset.dnase_data_dir, local_norm_halfwidth=interval_length/2)
                 dataset2extractors[dataset_id].append(dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir])
             logger.info("Found memmapped dnase bigwigs, initialized memmaped bigwig extractors")
         # get appropriate model class

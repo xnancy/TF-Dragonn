@@ -13,7 +13,10 @@ The data config file supports `genome_fasta` and `dnase_bigwig` inputs for quick
 ```
 tfdragonn memmap --data-config-file examples/DNASE_fc_bigwigs.json --memmap-dir ./large_scale_encoding_example --output-file examples/DNASE_fc_memmaped.json
 ```
-`examples/DNASE_fc_memmaped.json` is the new data config file with encoded inputs.
+`examples/DNASE_fc_memmaped.json` is the new data config file with encoded inputs. Here is another example command that encodes DNase foldchange bigwigs and the human genome fasta:
+```
+tfdragonn memmap --data-config-file examples/genome_fasta_and_DNASE_fc_bigwigs.json --memmap-dir /mnt/data/memmap/TF_challenge_DNASE/ --output-file examples/genome_and_DNASE_fc_memmaped.json
+```
 
 ### Processing raw peak files into labeled regions
 The `tfdragonn label_regions` command provides a simple way to process datasets with raw peaks files into sets of regions of fixed length and the corresponding labels. `examples/TF_peaks_and_memmaped_fasta_DNASE_training.json` is an example config file with all of the reproducible TF peak data in the TF binding challenge. We process these peaks into pairs of regions and label by running:

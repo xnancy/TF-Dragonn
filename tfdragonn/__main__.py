@@ -109,6 +109,7 @@ def main_memmap(data_config_file=None,
     data_dict = data.to_dict()
     logger.info("Memapping input data in {}...".format(data_config_file))
     for dataset_id, dataset in data:
+        memmap_dataset_dict = dataset.to_dict()
         for input_key in RAW_INPUT_KEYS:
             raw_input_fname = getattr(dataset, input_key)
             if raw_input_fname is not None:
@@ -117,7 +118,6 @@ def main_memmap(data_config_file=None,
                 extractor = input2memmap_extractor[input_key]
                 extractor.setup_mmap_arrays(raw_input_fname, input_memmap_dir)
                 # update the dataset in data
-                memmap_dataset_dict = dataset.to_dict()
                 del memmap_dataset_dict[input_key]
                 memmap_dataset_dict[input2memmap_input[input_key]] = input_memmap_dir
                 data_dict[dataset_id] = memmap_dataset_dict

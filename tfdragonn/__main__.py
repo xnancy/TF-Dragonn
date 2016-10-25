@@ -73,6 +73,12 @@ def parse_args():
                                                           prefix_parser],
                                          help='Generates fixed length regions and their labels for each dataset.'
                                               'Writes a new data config file with regions and labels files.')
+    label_regions_parser.add_argument('--bin-size', type=int, default=200,
+                                       help='size of bins for labeling')
+    label_regions_parser.add_argument('--flank-size', type=int, default=400,
+                                       help='size of flanks around labeled bins')
+    label_regions_parser.add_argument('--stride', type=int, default=200,
+                                       help='spacing between consecutive bins')
     train_parser = subparsers.add_parser('train',
                                          parents=[data_config_parser,
                                                   multiprocessing_parser,
@@ -129,6 +135,9 @@ def main_memmap(data_config_file=None,
     logger.info("Done!")
 
 def main_label_regions(data_config_file=None,
+                       bin_size=None,
+                       flank_size=None,
+                       stride=None,
                        n_jobs=None,
                        prefix=None,
                        output_file=None):
@@ -146,7 +155,7 @@ def main_label_regions(data_config_file=None,
             logger.info("Regions file {0}.intervals.bed and labels file {0}.labels.npy already exists. skipping dataset {1}!".format(dataset_prefix, dataset_id))
         else:
             regions, labels = get_tf_predictive_setup(dataset.feature_beds, region_bedtool=dataset.region_bed,
-                                                      bin_size=200, flank_size=400, stride=200,
+                                                      bin_size=bin_size, flank_size=flank_size, stride=stride,
                                                       filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
                                                       save_to_prefix=dataset_prefix)
             logger.info("Saved regions to {0}.intervals.bed and labels to {0}.labels.npy".format(dataset_prefix))

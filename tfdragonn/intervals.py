@@ -61,6 +61,17 @@ def filter_interval_by_chrom(interval, chrom_list):
         return False
 
 
+def filter_interval_by_length(interval, interval_length):
+    """
+    Removes intervals smaller than interval_length.
+    To be used with BedTool.each
+    """
+    if interval.length < interval_length:
+        return False
+    else:
+        return interval
+
+
 def pad_interval(interval, interval_size):
     """
     Interval padding utility for BedTool.each
@@ -144,7 +155,7 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
         true_labels_list = Parallel(n_jobs=n_jobs)(delayed(bed_intersection_labels)(bins.fn, fname)
                                                    for fname in true_feature_fnames)
     true_labels = np.concatenate(true_labels_list, axis=1)
-    bins_and_flanks = bins.slop(b=flank_size)
+    bins_and_flanks = bins.slop(b=flank_size).each(filter_interval_by_length, bin_size + flank_size)
     if filter_flank_overlaps:
         # intersect bins and flanks for any overlap  with true features
         if n_jobs == 1:

@@ -29,5 +29,3 @@ The new data config file, `examples/regions_and_labels_for_TF_peaks_and_memmaped
 ### Model testing
 
 ### Interpreting data with trained models
-
-### Processing raw peak files into intervals and labels

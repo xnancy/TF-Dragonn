@@ -15,6 +15,7 @@ from keras.layers.core import (
 )
 from keras.layers.convolutional import Convolution2D, MaxPooling2D, AveragePooling2D
 from keras.layers.recurrent import GRU
+from keras.objectives import binary_crossentropy
 from keras import optimizers
 from keras.regularizers import l1
 from keras.utils.generic_utils import Progbar
@@ -33,7 +34,7 @@ def class_weights(y):
     num_neg = (y == 0).sum()
     num_pos = (y == 1).sum()
 
-    return 0.1 * total / num_neg, 5 * total / num_pos
+    return total / num_neg, total / num_pos
 
 
 def get_weighted_binary_crossentropy(w0_weights, w1_weights):
@@ -43,10 +44,22 @@ def get_weighted_binary_crossentropy(w0_weights, w1_weights):
     w1_weights = np.array(w1_weights)
     def binary_crossentropy(y_true, y_pred): 
         weightsPerTaskRep = y_true * w1_weights[None, :] + (1 - y_true) * w0_weights[None, :]
-        nonAmbig = (y_true > 0.5)
+        nonAmbig = (y_true > -0.5)
         nonAmbigTimesWeightsPerTask = nonAmbig * weightsPerTaskRep
         return K.mean(K.binary_crossentropy(y_pred, y_true) * nonAmbigTimesWeightsPerTask, axis=-1)
     return binary_crossentropy
+
+
+def build_masked_loss(loss_function, mask_value=AMBIG_LABEL):
+    def masked_loss_function(y_true, y_pred):
+        mask = K.cast(K.not_equal(y_true, mask_value), K.floatx())
+        return loss_function(y_true * mask, y_pred * mask)
+
+    return masked_loss_function
+
+
+def masked_binary_crossentropy(mask_value=AMBIG_LABEL):
+    return build_masked_loss(binary_crossentropy, mask_value=mask_value)
 
 
 class PrintMetrics(Callback):
@@ -102,7 +115,7 @@ class SequenceClassifier(object):
         else:
             raise RuntimeError("Model initialization requires seq_length and num_tasks or arch/weights files!")
 
-    def compile(self, optimizer='adam', lr=0.00001, y=None):
+    def compile(self, optimizer='adam', lr=0.001, y=None):
         """
         Defines learning parameters and compiles the model.
 
@@ -116,7 +129,7 @@ class SequenceClassifier(object):
             task_weights = np.array([class_weights(y[:, i]) for i in range(y.shape[1])])
             loss_func = get_weighted_binary_crossentropy(task_weights[:, 0], task_weights[:, 1])
         else:
-            loss_func='binary_crossentropy'
+            loss_func = masked_binary_crossentropy()
         optimizer_cls = getattr(optimizers, optimizer)
         optimizer = optimizer_cls(lr=lr)
         self.model.compile(optimizer=optimizer, loss=loss_func)
@@ -314,8 +327,7 @@ class StreamingSequenceClassifier(SequenceClassifier):
         labels_list = []
         for dataset_id, (regions, labels) in dataset2test_regions_and_labels.items():
             predictions = self.predict(regions, dataset2fasta_extractor[dataset_id], batch_size=batch_size)
-            dataset2classification_result[dataset_id] = self.test(regions, labels, dataset2fasta_extractor[dataset_id],
-                                                                  task_names=task_names)
+            dataset2classification_result[dataset_id] = ClassificationResult(labels, predictions, task_names=task_names)
             predictions_list.append(predictions)
             labels_list.append(labels)
         predictions = np.vstack(predictions_list)
@@ -349,8 +361,8 @@ class StreamingSequenceClassifier(SequenceClassifier):
 class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
 
     def __init__(self, seq_length=None, num_tasks=None, arch_fname=None, weights_fname=None,
-                 num_seq_filters=(25, 35, 45), seq_conv_width=(25, 25, 25),
-                 num_dnase_filters=(25, 35, 45), dnase_conv_width=(45, 45, 45),
+                 num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
+                 num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  pool_width=35, L1=0, dropout=0.0,
                  num_epochs=100, verbose=1):
         self.saved_params = locals()
@@ -373,7 +385,6 @@ class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
                 cnn.add(Convolution2D(
                     num_filters_list[0],
                     num_channels, conv_width_list[0],
-                    border_mode="same",
                     activation="relu", init="he_normal",
                     input_shape=(1, num_channels, seq_length)
                 ))
@@ -382,7 +393,6 @@ class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
                     cnn.add(Convolution2D(
                         num_filters_list[i],
                         1, conv_width_list[i],
-                        border_mode="same",
                         activation="relu", init="he_normal",
                         W_regularizer=l1(L1)
                     ))
@@ -394,14 +404,14 @@ class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
             dnase_model = build_cnn(seq_length, 1, num_dnase_filters, dnase_conv_width)
             self.model.add(Merge([seq_model, dnase_model], mode='concat', concat_axis=2))
             self.model.add(Convolution2D( # TODO: add num_combined_filters, combined_conv_width to init 
-                35, 2, 25,
+                55, 2, 25,
                 border_mode="same",
                 activation="relu", init="he_normal",
                 W_regularizer=l1(L1)
             ))
             self.model.add(AveragePooling2D(pool_size=(1, pool_width)))
             self.model.add(Flatten())
-            self.model.add(Dense(200)) # add fc_layer_sizes to init
+            #self.model.add(Dense(200)) # add fc_layer_sizes to init
             self.model.add(Dense(output_dim=self.num_tasks))
             self.model.add(Activation('sigmoid'))
         else:

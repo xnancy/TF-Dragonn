@@ -155,6 +155,7 @@ def main_label_regions(data_config_file=None,
             logger.info("Regions file {0}.intervals.bed and labels file {0}.labels.npy already exists. skipping dataset {1}!".format(dataset_prefix, dataset_id))
         else:
             regions, labels = get_tf_predictive_setup(dataset.feature_beds, region_bedtool=dataset.region_bed,
+                                                      ambiguous_feature_bedtools=dataset.ambiguous_feature_beds,
                                                       bin_size=bin_size, flank_size=flank_size, stride=stride,
                                                       filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
                                                       save_to_prefix=dataset_prefix)
@@ -162,6 +163,7 @@ def main_label_regions(data_config_file=None,
         # update the data dictionary
         labeled_regions_dataset_dict = dataset.to_dict()
         del labeled_regions_dataset_dict["feature_beds"]
+        del labeled_regions_dataset_dict["ambiguous_feature_beds"]
         del labeled_regions_dataset_dict["region_bed"]
         labeled_regions_dataset_dict["regions"] = os.path.abspath("{}.intervals.bed".format(dataset_prefix))
         labeled_regions_dataset_dict["labels"] = os.path.abspath("{}.labels.npy".format(dataset_prefix))
@@ -187,16 +189,18 @@ def main_train(data_config_file=None,
                                       for dataset_id, dataset in datasets}
     else: ## TODO: call main_label_regions, continue with output data config file
         raise RuntimeError("data config file doesnt include regions and labels for each dataset. Run the label_regions command first!")
-    # split regions and labels into train and test, shuffle the training data
-    logger.info("Splitting regions and labels into train and test subsets and shuffling train subset...")
+    # split regions and labels into train, valid and test, shuffle the training data
+    # test data not used at all during training or early stopping
+    logger.info("Splitting regions and labels into train and validation subsets and shuffling train subset...")
     dataset2train_regions_and_labels = collections.OrderedDict()
     dataset2test_regions_and_labels = collections.OrderedDict()
     total_training_examples = [0] # total examples in each dataset
     for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
-        regions_train, regions_test, y_train, y_test = train_test_chr_split(regions, labels, ["chr1", "chr2"])
+        regions_train, regions_test, y_train, y_test = train_test_chr_split(regions, labels, ["chr1", "chr21", "chr8"])
+        regions_train, regions_valid, y_train, y_valid = train_test_chr_split(regions, labels, ["chr9"])
         regions_train, y_train = shuffle(regions_train, y_train, random_state=0)
         dataset2train_regions_and_labels[dataset_id] = (regions_train, y_train)
-        dataset2test_regions_and_labels[dataset_id] = (regions_test, y_test)
+        dataset2test_regions_and_labels[dataset_id] = (regions_valid, y_valid)
         total_training_examples.append(len(y_train))
     # set up the architecture
     interval_length = dataset2train_regions_and_labels.values()[0][0][0].length
@@ -245,9 +249,9 @@ def main_train(data_config_file=None,
         logger.info("Initializing a {}".format(model_class))
         model = model_class(interval_length, num_tasks, **architecture_parameters)
         logger.info("Compiling {}..".format(model_class))
-        model.compile(y=y_train)
+        model.compile() #y=y_train) ## TODO: proper task scaling at batch level instead
         logger.info("Starting to train with streaming data..")
-        #model.train(intervals_train, y_train, intervals_test, y_test, fasta_extractor,
+        #model.train(intervals_train, y_train, intervals_valid, y_valid, fasta_extractor,
         #            save_best_model_to_prefix=prefix)
         model.train_on_multiple_datasets(
             dataset2train_regions_and_labels, dataset2test_regions_and_labels, dataset2extractors,
@@ -344,7 +348,7 @@ def main_test(data_config_file=None,
                                                   save_to_prefix=prefix)
     # get test subset
     ## TODO: user-specified chromosomes
-    _, intervals_test, _, y_test = train_test_chr_split(regions, labels, ["chr1", "chr2"])
+    _, intervals_test, _, y_test = train_test_chr_split(regions, labels, ["chr1", "chr21", "chr8"])
     if data['genome_data_dir'] is not None: # use a streaming model
         fasta_extractor = MemmappedFastaExtractor(data['genome_data_dir'])
         logger.info("loading a StreamingSequenceClassifier model...")

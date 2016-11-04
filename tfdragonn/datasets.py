@@ -180,11 +180,12 @@ class Datasets(object):
         assert len(task_names) == len(self.task_names), "task names must be unique!"
         for dataset_id, dataset in self:
             assert type(dataset.feature_beds) is collections.OrderedDict, "feature beds in dataset {} are not a dictionary:\n{}".format(dataset_id, dataset.feature_beds)
-            assert type(dataset.ambiguous_feature_beds) is collections.OrderedDict, "ambiguous feature beds in dataset {} are not a dictionary:\n{}".format(dataset_id, dataset.ambiguous_feature_beds)
             dataset_task_names = set(dataset.feature_beds.keys())
             assert dataset_task_names.issubset(task_names), "Tasks {} in {} are not in task_names!".format(dataset_task_names - task_names, dataset_id)
-            dataset_ambiguous_task_names = set(dataset.ambiguous_feature_beds.keys())
-            assert dataset_ambiguous_task_names.issubset(task_names), "Tasks {} in {} are not in task_names!".format(dataset_ambiguous_task_names - task_names, dataset_id)
+            if dataset.ambiguous_feature_beds is not None:
+                assert type(dataset.ambiguous_feature_beds) is collections.OrderedDict, "ambiguous feature beds in dataset {} are not a dictionary:\n{}".format(dataset_id, dataset.ambiguous_feature_beds)
+                dataset_ambiguous_task_names = set(dataset.ambiguous_feature_beds.keys())
+                assert dataset_ambiguous_task_names.issubset(task_names), "Tasks {} in {} are not in task_names!".format(dataset_ambiguous_task_names - task_names, dataset_id)
 
     def convert_to_ordered_labeled_interval_datasets(self):
         """
@@ -192,12 +193,16 @@ class Datasets(object):
         """
         for i, (dataset_id, dataset) in enumerate(self):
             feature_beds_list = []
-            ambiguous_feature_beds_list = []
             for task_name in self.task_names:
                 feature_beds_list.append(dataset.feature_beds[task_name] if task_name in dataset.feature_beds.keys() else None)
-                ambiguous_feature_beds_list.append(dataset.ambiguous_feature_beds[task_name] if task_name in dataset.ambiguous_feature_beds.keys() else None)
             self.datasets[i].feature_beds = feature_beds_list
-            self.datasets[i].ambiguous_feature_beds = ambiguous_feature_beds_list
+            if dataset.ambiguous_feature_beds is not None:
+                ambiguous_feature_beds_list = []
+                for task_name in self.task_names:
+                    ambiguous_feature_beds_list.append(dataset.ambiguous_feature_beds[task_name] if task_name in dataset.ambiguous_feature_beds.keys() else None)
+                self.datasets[i].ambiguous_feature_beds = ambiguous_feature_beds_list
+            else:
+                self.datasets[i].ambiguous_feature_beds = None
 
     def to_dict(self):
         datasets_dict = collections.OrderedDict()

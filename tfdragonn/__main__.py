@@ -14,7 +14,7 @@ from genomedatalayer.extractors import (
 )
 
 from .datasets import Dataset, parse_data_config_file
-from .intervals import get_tf_predictive_setup, train_test_chr_split
+from .intervals import get_tf_predictive_setup, train_test_chr_split, train_valid_test_chr_split
 
 # setup logging
 log_formatter = \
@@ -196,8 +196,8 @@ def main_train(data_config_file=None,
     dataset2test_regions_and_labels = collections.OrderedDict()
     total_training_examples = [0] # total examples in each dataset
     for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
-        regions_train, regions_test, y_train, y_test = train_test_chr_split(regions, labels, ["chr1", "chr21", "chr8"])
-        regions_train, regions_valid, y_train, y_valid = train_test_chr_split(regions, labels, ["chr9"])
+        ( regions_train, regions_valid, regions_test,
+          y_train, y_valid, y_test ) = train_valid_test_chr_split(regions, labels, ["chr9"], ["chr1", "chr21", "chr8"])
         regions_train, y_train = shuffle(regions_train, y_train, random_state=0)
         dataset2train_regions_and_labels[dataset_id] = (regions_train, y_train)
         dataset2test_regions_and_labels[dataset_id] = (regions_valid, y_valid)

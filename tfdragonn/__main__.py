@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function
 
 import argparse
 import collections
@@ -93,9 +93,9 @@ def parse_args():
     test_parser = subparsers.add_parser('test',
                                         parents=[data_config_parser,
                                                  model_files_parser,
-                                                 multiprocessing_parser,
-                                                 prefix_parser],
+                                                 multiprocessing_parser],
                                         help='model testing help')
+    test_parser.add_argument('--test-chr', type=str, nargs="+", help="Chromosomes to subset test data.")
     # return command and command arguments
     args = vars(parser.parse_args())
     command = args.pop("command", None)
@@ -276,6 +276,50 @@ def main_train(data_config_file=None,
     logger.info("Done!")
 
 
+def main_test(data_config_file=None,
+              test_chr=None,
+              n_jobs=None,
+              arch_file=None,
+              weights_file=None):
+    # get matched region beds and feature/tf beds
+    logger.info("parsing data config file..")
+    datasets = parse_data_config_file(data_config_file)
+    # get regions and labels
+    if datasets.include_regions and datasets.include_labels:
+        dataset2regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
+                                      for dataset_id, dataset in datasets}
+    else: ## TODO: call main_label_regions, continue with output data config file
+        raise RuntimeError("data config file doesnt include regions and labels for each dataset. Run the label_regions command first!")
+    # get test subset if specified
+    if test_chr is not None:
+        logger.info("Subsetting test data to {}...".format(test_chr))
+        for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
+            _, regions_test, _, y_test = train_test_chr_split(regions, labels, test_chr)
+            dataset2regions_and_labels[dataset_id] = (regions_test, y_test)
+    # get data extractors
+    interval_length = dataset2regions_and_labels.values()[0][0][0].length
+    dataset2extractors = datasets.get_dataset2extractors(int(interval_length/2))
+    # initialize model and test
+    if datasets.memmaped:
+        if datasets.memmaped_fasta:
+            if datasets.memmaped_dnase:
+                model_class = StreamingSequenceAndDnaseClassifier
+            else:
+                model_class = StreamingSequenceClassifier
+        logger.info("Initializing a {}".format(model_class))
+        model = model_class(arch_fname=arch_file, weights_fname=weights_file)
+        logger.info("Testing the model...")
+        ( dataset2classification_result,
+          combined_classification_result ) = model.test_on_multiple_datasets(dataset2regions_and_labels, dataset2extractors,
+                                                                             batch_size=128, task_names=datasets.task_names)
+        for dataset_id, classification_result in dataset2classification_result.items():
+            print('Dataset {}:\n{}\n'.format(dataset_id, classification_result), end='')
+        if len(dataset2classification_result) > 1:
+            print('Metrics across all datasets:\n{}\n'.format(combined_classification_result), end='')
+    else:
+        raise RuntimeError("Model testing doesnt support non streaming models!")
+
+
 def main_interpret(data_config_file=None,
                    prefix=None,
                    n_jobs=None,
@@ -323,51 +367,6 @@ def main_interpret(data_config_file=None,
                              merge_type='max',
                              CHROM_SIZES='/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes')
     logger.info("Done!")
-
-
-def main_test(data_config_file=None,
-              prefix=None,
-              n_jobs=None,
-              arch_file=None,
-              weights_file=None):
-    from dlutils import write_deeplift_track
-    # get matched region beds and feature/tf beds
-    logger.info("parsing data config file..")
-    data = parse_data_config_file(data_config_file)
-    # get regions and labels
-    if os.path.isfile("{}.intervals.bed".format(prefix)) and os.path.isfile("{}.labels.npy".format(prefix)):
-        logger.info("loading intervals from {}.intervals.bed".format(prefix))
-        regions = BedTool("{}.intervals.bed".format(prefix))
-        logger.info("loading labels from {}.labels.npy".format(prefix))
-        labels = np.load("{}.labels.npy".format(prefix))
-    else:
-        logger.info("getting regions and labels")
-        regions, labels = get_tf_predictive_setup(feature_beds, region_bedtool=region_bed,
-                                                  bin_size=200, flank_size=400, stride=200,
-                                                  filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
-                                                  save_to_prefix=prefix)
-    # get test subset
-    ## TODO: user-specified chromosomes
-    _, intervals_test, _, y_test = train_test_chr_split(regions, labels, ["chr1", "chr21", "chr8"])
-    if data['genome_data_dir'] is not None: # use a streaming model
-        fasta_extractor = MemmappedFastaExtractor(data['genome_data_dir'])
-        logger.info("loading a StreamingSequenceClassifier model...")
-        model = StreamingSequenceClassifier(arch_fname=arch_file,
-                                   weights_fname=weights_file)
-        logger.info("Testing the model...")
-        test_results = model.test(intervals_test, y_test, fasta_extractor)
-    else: # extract encoded data in memory
-        logger.info("loading a SequenceClassifier model...")
-        model = SequenceClassifier(arch_fname=arch_file,
-                                   weights_fname=weights_file)
-        # extract encoded data in memory
-        logger.info("extracting data in memory")
-        fasta_extractor = FastaExtractor(data['genome_fasta'])
-        logger.info("extracting test data")
-        X_test = fasta_extractor(intervals_test)
-        logger.info("Testing the model...")
-        test_results = model.test(X_test, y_test)
-    logger.info("Test results:\n{}".format(test_results))
 
 
 def main():

@@ -212,6 +212,33 @@ class Datasets(object):
 
         return datasets_dict
 
+    def get_dataset2extractors(self, local_norm_halfwidth=None):
+        if self.memmaped:
+            sequence_input = False
+            dnase_input = False
+            dataset2extractors = {dataset_id: [] for dataset_id, _ in self}
+            if self.memmaped_fasta:
+                sequence_input = True
+                # write non redundant mapping from data_dir to extractor
+                genome_data_dir2fasta_extractor = {}
+                for dataset_id, dataset in self:
+                    if dataset.genome_data_dir not in genome_data_dir2fasta_extractor:
+                        genome_data_dir2fasta_extractor[dataset.genome_data_dir] = MemmappedFastaExtractor(dataset.genome_data_dir)
+                    dataset2extractors[dataset_id].append(genome_data_dir2fasta_extractor[dataset.genome_data_dir])
+            if self.memmaped_dnase:
+                dnase_input = True
+                # write non redundant mapping from data_dir to extractor
+                dnase_data_dir2bigwig_extractor = {}
+                for dataset_id, dataset in self:
+                    if dataset.dnase_data_dir not in dnase_data_dir2bigwig_extractor:
+                        dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir] = MemmappedBigwigExtractor(
+                            dataset.dnase_data_dir, local_norm_halfwidth=local_norm_halfwidth)
+                    dataset2extractors[dataset_id].append(dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir])
+        else:
+            raise RuntimeError("get_dataset2extractors doesn't support non memmaped inputs!")
+
+        return dataset2extractors
+
 
 def parse_data_config_file(data_config_file):
     """

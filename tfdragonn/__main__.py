@@ -57,6 +57,9 @@ def parse_args():
     memmap_dir_parser = argparse.ArgumentParser(add_help=False)
     memmap_dir_parser.add_argument('--memmap-dir', type=str, required=True,
                                help='directories with memmaped data are created in this directory.')
+    predict_opts_parser = argparse.ArgumentParser(add_help=False)
+    predict_opts_parser.add_argument('--test-chr', type=str, nargs="+", help="Chromosomes to subset test data.")
+    predict_opts_parser.add_argument('--verbose', action='store_true', default=False, help="Shows prediction progress bar")
     # define commands
     subparsers = parser.add_subparsers(help='tf-dragonn command help', dest='command')
     memmap_parser = subparsers.add_parser('memmap',
@@ -93,9 +96,16 @@ def parse_args():
     test_parser = subparsers.add_parser('test',
                                         parents=[data_config_parser,
                                                  model_files_parser,
-                                                 multiprocessing_parser],
+                                                 multiprocessing_parser,
+                                                 predict_opts_parser],
                                         help='model testing help')
-    test_parser.add_argument('--test-chr', type=str, nargs="+", help="Chromosomes to subset test data.")
+    predict_parser = subparsers.add_parser('predict',
+                                        parents=[data_config_parser,
+                                                 model_files_parser,
+                                                 output_file_parser,
+                                                 predict_opts_parser,
+                                                 prefix_parser],
+                                        help='model testing help')
     # return command and command arguments
     args = vars(parser.parse_args())
     command = args.pop("command", None)
@@ -133,6 +143,7 @@ def main_memmap(data_config_file=None,
     json.dump(data_dict, open(output_file, "w"), indent=4)
     logger.info("Wrote memaped data config file to {}.".format(output_file))
     logger.info("Done!")
+
 
 def main_label_regions(data_config_file=None,
                        bin_size=None,
@@ -278,6 +289,7 @@ def main_train(data_config_file=None,
 
 def main_test(data_config_file=None,
               test_chr=None,
+              verbose=None,
               n_jobs=None,
               arch_file=None,
               weights_file=None):
@@ -311,13 +323,72 @@ def main_test(data_config_file=None,
         logger.info("Testing the model...")
         ( dataset2classification_result,
           combined_classification_result ) = model.test_on_multiple_datasets(dataset2regions_and_labels, dataset2extractors,
-                                                                             batch_size=128, task_names=datasets.task_names)
+                                                                             batch_size=500, task_names=datasets.task_names,
+                                                                             verbose=verbose)
         for dataset_id, classification_result in dataset2classification_result.items():
             print('Dataset {}:\n{}\n'.format(dataset_id, classification_result), end='')
         if len(dataset2classification_result) > 1:
             print('Metrics across all datasets:\n{}\n'.format(combined_classification_result), end='')
     else:
         raise RuntimeError("Model testing doesnt support non streaming models!")
+
+
+def main_predict(data_config_file=None,
+                 test_chr=None,
+                 verbose=None,
+                 n_jobs=None,
+                 arch_file=None,
+                 weights_file=None,
+                 prefix=None,
+                 output_file=None):
+    # get matched region beds and feature/tf beds
+    logger.info("parsing data config file..")
+    datasets = parse_data_config_file(data_config_file)
+    # get regions and labels
+    if datasets.include_regions and datasets.include_labels:
+        dataset2regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
+                                      for dataset_id, dataset in datasets}
+    else: ## TODO: call main_label_regions, continue with output data config file
+        raise RuntimeError("data config file doesnt include regions and labels for each dataset. Run the label_regions command first!")
+    # get test subset if specified
+    if test_chr is not None:
+        logger.info("Subsetting test data to {}...".format(test_chr))
+        for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
+            _, regions_test, _, y_test = train_test_chr_split(regions, labels, test_chr)
+            dataset2regions_and_labels[dataset_id] = (regions_test, y_test)
+    # get data extractors
+    interval_length = dataset2regions_and_labels.values()[0][0][0].length
+    dataset2extractors = datasets.get_dataset2extractors(int(interval_length/2))
+    # initialize model and test
+    if datasets.memmaped:
+        if datasets.memmaped_fasta:
+            if datasets.memmaped_dnase:
+                model_class = StreamingSequenceAndDnaseClassifier
+            else:
+                model_class = StreamingSequenceClassifier
+        logger.info("Initializing a {}".format(model_class))
+        model = model_class(arch_fname=arch_file, weights_fname=weights_file)
+        logger.info("Running predictions...")
+        data_dict = datasets.to_dict()
+        for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
+            preds = model.predict(regions, dataset2extractors[dataset_id], batch_size=500, verbose=verbose)
+            regions_fname = os.path.abspath("{}.{}.regions.bed".format(prefix, dataset_id))
+            preds_fname = os.path.abspath("{}.{}.predictions.npy".format(prefix, dataset_id))
+            BedTool(regions).saveas().moveto(regions_fname)
+            np.save(preds_fname, preds)
+            for key, value in data_dict[dataset_id].items():
+                if key == "regions":
+                    data_dict[dataset_id][key] = regions_fname
+                elif key == "labels":
+                    data_dict[dataset_id][key] = preds_fname
+                else:
+                    data_dict[dataset_id][key] = None
+            logger.info("Saved {} dataset regions to {} and predictions to {}".format(dataset_id, regions_fname, preds_fname))
+        json.dump(data_dict, open(output_file, "w"), indent=4)
+        logger.info("Wrote prediction data config file to {}.".format(output_file))
+        logger.info("Done!")
+    else:
+        raise RuntimeError("tfdragonn predict doesnt support non streaming models!")
 
 
 def main_interpret(data_config_file=None,
@@ -374,10 +445,11 @@ def main():
     command_functions = {'memmap': main_memmap,
                          'label_regions': main_label_regions,
                          'train': main_train,
+                         'predict': main_predict,
                          'interpret': main_interpret,
                          'test': main_test}
     command, args = parse_args()
-    if command in ['train', 'interpret', 'test']: # perform theano/keras import
+    if command in ['train', 'predict', 'interpret', 'test']: # perform theano/keras import
         global SequenceClassifier, StreamingSequenceClassifier, StreamingSequenceAndDnaseClassifier
         from .models import SequenceClassifier, StreamingSequenceClassifier, StreamingSequenceAndDnaseClassifier
     # run command

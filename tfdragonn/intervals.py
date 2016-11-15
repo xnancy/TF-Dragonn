@@ -36,6 +36,34 @@ def multibed_intersection_labels(region_bedtool, feature_bedtools, f=0.5, F=0.5,
     return np.concatenate(tuple(labels), axis=1)
 
 
+def bed_intersection_scores(region_bedtool, feature_bedtool, f=0.5, F=0.5, e=True, score_index=4, **kwargs):
+    """
+    intersects regions with feature bed and returns 0 if no intersection found, or the score if
+    an intersection was found
+    """
+    region_bedtool = BedTool(region_bedtool)
+
+    if feature_bedtool is not None:
+        # Get inersection labels and intersecting region subset from a sorted region bedtool
+        feature_bedtool = BedTool(feature_bedtool).sort()
+        intersect_labels = bed_intersection_labels(region_bedtool, feature_bedtool, f=f, F=F)
+        intersecting_regions = region_bedtool.at(np.where(intersect_labels == 1)[0])
+        # For intersecting subset, get matched intersecting feature regions
+        matched_intersects = intersecting_regions.intersect(BedTool(feature_bedtool), wao=True, f=f, F=F, e=True)
+        # Group by score index coumn in matched region bedtool.
+        # Its going to be the usr defined score index shifted by the total number
+        # of fields/columns in the dnase bed file.
+        groupby_col_index = score_index + intersecting_regions.field_count()
+        grouped_matched_intersects = matched_intersects.groupby(g=[1,2,3], c=groupby_col_index, o="max")
+        # Initialize score array, store scores where intersection labels are 1
+        scores = np.zeros(intersect_labels.shape)
+        intersection_scores = [interval.fields[-1] for interval in grouped_matched_intersects]
+        scores[intersect_labels == 1] = np.array(intersection_scores, dtype=float)
+        return scores
+    else:
+        return -1 * np.ones((region_bedtool.count(), 1))
+
+
 def combine_bedtools(bedtools):
     """
     Combines sequence of bedtools.

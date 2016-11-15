@@ -105,7 +105,16 @@ def parse_args():
                                                  output_file_parser,
                                                  predict_opts_parser,
                                                  prefix_parser],
-                                        help='model testing help')
+                                        help='model predictions help')
+    predict_parser.add_argument('--flank-size', type=int, required=True,
+                                help='size of flanks in regions. These will be trimmed to output prediction bins.')
+    evaluate_parser = subparsers.add_parser('evaluate',
+                                            parents=[data_config_parser],
+                                            help='Predictions evaluation help')
+    evaluate_parser.add_argument('--predictions-config-file', type=str, required=True,
+                                 help="Config file with regions and predictions")
+    evaluate_parser.add_argument('--stride', type=int, default=None,
+                                 help='Spacing between regions (predicted and/or labeled). Used to determine minimum fraction overlap for scoring if specified. Default fraction overlap is 0.5 (assumes stride = region size).')
     # return command and command arguments
     args = vars(parser.parse_args())
     command = args.pop("command", None)
@@ -335,6 +344,7 @@ def main_test(data_config_file=None,
 
 def main_predict(data_config_file=None,
                  test_chr=None,
+                 flank_size=None,
                  verbose=None,
                  n_jobs=None,
                  arch_file=None,
@@ -374,6 +384,10 @@ def main_predict(data_config_file=None,
             preds = model.predict(regions, dataset2extractors[dataset_id], batch_size=500, verbose=verbose)
             regions_fname = os.path.abspath("{}.{}.regions.bed".format(prefix, dataset_id))
             preds_fname = os.path.abspath("{}.{}.predictions.npy".format(prefix, dataset_id))
+            # trim flanks from regions
+            for i in xrange(len(regions)):
+                regions[i].start += flank_size
+                regions[i].stop -= flank_size
             BedTool(regions).saveas().moveto(regions_fname)
             np.save(preds_fname, preds)
             for key, value in data_dict[dataset_id].items():
@@ -389,6 +403,55 @@ def main_predict(data_config_file=None,
         logger.info("Done!")
     else:
         raise RuntimeError("tfdragonn predict doesnt support non streaming models!")
+
+def main_evaluate(data_config_file=None,
+                  predictions_config_file=None,
+                  stride=None):
+    from .intervals import bed_intersection_scores
+    from .metrics import ClassificationResult
+    # get regions and labels
+    logger.info("parsing data config file..")
+    datasets = parse_data_config_file(data_config_file)
+    if datasets.include_regions and datasets.include_labels:
+        dataset2regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
+                                      for dataset_id, dataset in datasets}
+    else: ## TODO: call main_label_regions, continue with output data config file
+        raise RuntimeError("data config file doesnt include regions and labels for each dataset. Run the label_regions command first!")
+    # get predicted regions and predicted probabilities
+    logger.info("parsing predictions config file..")
+    datasets_preds = parse_data_config_file(predictions_config_file)
+    if datasets_preds.include_regions and datasets_preds.include_labels:
+        dataset2preds_regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
+                                            for dataset_id, dataset in datasets_preds}
+    # intersect predictions and get classification metrics
+    logger.info("Evaluating predicted regions against all regions..")
+    dataset2classification_result = {}
+    predictions_list = []
+    labels_list = []
+    for dataset_id, (preds_regions, preds_labels) in dataset2preds_regions_and_labels.items():
+        logger.info("Evaluating predictions in dataset {}...".format(dataset_id))
+        preds_df = BedTool(preds_regions).to_dataframe()
+        preds_df.iloc[:, -1] = preds_labels
+        preds_bedtool = BedTool.from_dataframe(preds_df)
+        regions, labels = dataset2regions_and_labels[dataset_id]
+        if stride is not None:
+            interval_length = dataset2regions_and_labels.values()[0][0][0].length
+            f = 1 - (stride - 1) / interval_length
+            F = 1 - (stride - 1) / interval_length
+        else:
+            f = 0.5
+            F = 0.5
+        predictions = bed_intersection_scores(BedTool(regions), preds_bedtool, score_index=4, f=f, F=F)
+        dataset2classification_result[dataset_id] = ClassificationResult(labels, predictions)
+        predictions_list.append(predictions)
+        labels_list.append(labels)
+    for dataset_id, classification_result in dataset2classification_result.items():
+        print('Dataset {}:\n{}\n'.format(dataset_id, classification_result), end='')
+    if len(dataset2classification_result) > 1:
+        predictions = np.vstack(predictions_list)
+        y = np.vstack(labels_list)
+        combined_classification_result = ClassificationResult(y, predictions)
+        print('Metrics across all datasets:\n{}\n'.format(combined_classification_result), end='')
 
 
 def main_interpret(data_config_file=None,
@@ -446,6 +509,7 @@ def main():
                          'label_regions': main_label_regions,
                          'train': main_train,
                          'predict': main_predict,
+                         'evaluate': main_evaluate,
                          'interpret': main_interpret,
                          'test': main_test}
     command, args = parse_args()

@@ -6,7 +6,7 @@ The `tfdragonn` package provides a command-line interface with command to proces
 ```
 tfdragonn --help
 ```
-The available commands are `memmap`, `label_regions`, `train`, `predict`, `evaluate`, `test`, and `interpret`. These commands simplify the standard workflow for modeling TF binding, including [processing input data](#encoding-raw-input-data), [processing output data](#Processing-raw-peak-files-into-fixed-size-genomic-regions-and-labels), [model training](#model-training), [standardizing predictions](#obtaining-regions-and-corresponding-predictions-with-trained-models), and (large scale evaluation)[#evaluating-predictions-on-dnase-regions-on-the-entire-chromosome]. The following usage of this workflow to produce competitive predictions of MYC binding for the DREAM challenge.
+The available commands are `memmap`, `label_regions`, `train`, `predict`, `evaluate`, `test`, and `interpret`. These commands simplify the standard workflow for modeling TF binding, including [processing input data](#encoding-raw-input-data), [processing output data](#Processing-raw-peak-files-into-fixed-size-genomic-regions-and-labels), [model training](#model-training), [standardizing predictions](#obtaining-regions-and-corresponding-predictions-with-trained-models), and [large scale evaluation](#evaluating-predictions-on-dnase-regions-chromosome-wide). The following usage of this workflow to produce competitive predictions of MYC binding for the DREAM challenge.
 
 ## Encoding raw input data
 The first step is to encode raw input data into arrays that can be indexed directly during training. Run the following command to encode the hg19 genome fasta and dnase bigwigs used in the challenge:
@@ -40,7 +40,7 @@ tfdragonn predict --data-config-file examples/predict/myc_relaxed_dnase_regions_
 ```
 The input data config file `examples/predict/myc_relaxed_dnase_regions_and_labels_w_ambiguous_stride50_flank400.json` points to DNase relaxed peaks processed with stride 50. `--verbose` is an optional argument that, if specified, will show a progress bar. `test-chr` is another optional argument, in this case it runs predictions only for regions in chr9. `--flank-size` is a required argument that is used to trim the input genomic regions to obtain the actual core bin of each region whose label we are predicting - *make sure this corresponds to the `flank-size` used in `label_regions`, otherwise you will get bad evaluation results in the next step!* The output data config file `examples/predict/predictions.json` points to the `.bed` files with trimmed regions and `.npy` files with predictions for each dataset.
 
-## Evaluating predictions on dnase regions on the entire chromosome
+## Evaluating predictions on dnase regions chromosome-wide
 Most TF binding sites are in DNase peaks but not all. To evaluate the performance of predictions on DNase regions in chr9 in the previous step on the entire chromosome, we first process chr9 into bins spanning the entire chromosome:
 ```
 tfdragonn label_regions --data-config-file examples/evaluate/myc_peaks_on_chr9_and_memmaped_inputs.json --bin-size 200 --flank-size 0 --stride 50 --prefix /mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0 --output-file examples/evaluate/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.json

@@ -27,8 +27,18 @@ The input data config file `examples/myc_peaks_on_dnase_conservative_and_memmape
 After a bin is labeled, we add extend it 400bp in each direction, specified by `--flank-size`, and the resulting fixed size regions are stored in a `.bed` file for each dataset whose name is based on `--prefix`. The full filename can be found in the output data config file in the `regions` attribute of each dataset. Besides datasets, the input and output data config files have `task_names` which is a list of all the tasks included in `feature_beds` across all datasets in the input data config file. The columns in the `labels` array in the output config file are ordered based on `task_names`. The dictionary-based specification of `feature_beds` allows for simple processing of datasets where you have a lot of tasks across all datasets but only a small subset of tasks with available data in a given dataset (in most celltypes there is data for a small fraction of total TFs assayed). 
 
 ## Model training
+Run the following command to train a model on the myc data using the data config file with processed regions and labels:
+```
+tfdragonn train --data-config-file examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.json --prefix examples/train/myc_distrubted_batch_training
+```
+Based on the `--prefix`, this command writes a model architecture file to `examples/train/myc_distrubted_batch_training.arch.json` and a model weights file to `examples/train/myc_distrubted_batch_training.weights.h5` 
 
 ## Obtaining regions and corresponding predictions with trained models
+Run the following command to obtain genomic regions and corresponding model predictions:
+```
+tfdragonn predict --data-config-file examples/predict/myc_relaxed_dnase_regions_and_labels_w_ambiguous_stride50_flank400.json --arch-file examples/train/myc_distrubted_batch_training.arch.json  --weights-file examples/train/myc_distrubted_batch_training.weights.h5 --test-chr chr9 --prefix examples/predict/relaxed_dnase_chr9 --output-file examples/predict/predictions.json --verbose --flank-size 400
+```
+The input data config file `examples/predict/myc_relaxed_dnase_regions_and_labels_w_ambiguous_stride50_flank400.json` points to DNase relaxed peaks processed with stride 50. `--verbose` is an optional argument that, if specified, will show a progress bar. `test-chr` is another optional argument, in this case it runs predictions only for regions in chr9. `--flank-size` is a required argument that is used to trim the input genomic regions to obtain the actual core bin of each region whose label we are predicting - *make sure this corresponds to the `flank-size` used in `label_regions`, otherwise you will get bad evaluation results in the next step!* The output data config file `examples/predict/predictions.json` points to the `.bed` files with trimmed regions and `.npy` files with predictions for each dataset.
 
 ## Evaluating predicted regions on a set of labeled regions
 

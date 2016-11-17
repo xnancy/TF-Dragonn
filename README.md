@@ -6,24 +6,26 @@ The `tfdragonn` package provides a command-line interface with command to proces
 ```
 tfdragonn --help
 ```
-The available commands are `memmap`, `label_regions`, `train`, `test`, and `interpret`. See sections below for example usage of each command.
+The available commands are `memmap`, `label_regions`, `train`, `predict`, `evaluate`, `test`, and `interpret`. These commands are designed to simplify common steps in model development: data preprocessing, model training/evaluation, and prediction. In the following sections I show how to use these commands to produce competitive predictions of MYC binding for the DREAM challenge.
 
-### Memory mapping raw input data
-The data config file supports `genome_fasta` and `dnase_bigwig` inputs for quick model prototyping. When these inputs are used for training/testing of models, `tfdragonn` will encode them based on the dataset intervals in into arrays that will be in memory throughout training/testing. For large scale data that cannot fit in memory, we first encode each input genome-wide into binary files that are then memory mapped to stream data for model training/testing. The `memmap` command performs genome-wide encoding of every raw input in a data config file and writes a new data config file with the binary inputs. Run this command to encode DNase foldchange bigwigs in 14 celltypes used for the TF binding challenge:
-```
-tfdragonn memmap --data-config-file examples/DNASE_fc_bigwigs.json --memmap-dir ./large_scale_encoding_example --output-file examples/DNASE_fc_memmaped.json
-```
-`examples/DNASE_fc_memmaped.json` is the new data config file with encoded inputs. Here is another example command that encodes DNase foldchange bigwigs and the human genome fasta:
+### Encoding raw input data
+The first step is to encode raw input data into arrays that can be indexed directly during training. Run the following command to encode the hg19 genome fasta and dnase bigwigs used in the challenge:
 ```
 tfdragonn memmap --data-config-file examples/genome_fasta_and_DNASE_fc_bigwigs.json --memmap-dir /mnt/data/memmap/TF_challenge_DNASE/ --output-file examples/genome_and_DNASE_fc_memmaped.json
 ```
+The input data config file `examples/genome_fasta_and_DNASE_fc_bigwigs.json` has a dictionary where the keys are dataset names (in this case the name of the celltype) and the value are `genome_fasta` and `dnase_bigwig` data for that dataset. `tfdragonn memmap` creates a directory for each fasta and bigwig file in `/mnt/data/memmap/TF_challenge_DNASE/`, for example `/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig/` for `DNASE.A549.fc.signal.bigwig`. In each fasta/bigwig directory, there is a `.npy` file for each chromosome that holds the encoded data for that chromosome. For example `/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig/chr10.npy` is an array with shape `(135534747,)` that has the dnase signal value for each position in that chromosome. Similarly, `/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa/chr10.npy` is an	array with shape `(4, 135534747)' that has the one hot encoding of the chromosome's sequence. Using these arrays, we can obtain data for any genomic interval based on its chromsome, start and end coordinates.
 
-### Processing raw peak files into labeled regions
-The `tfdragonn label_regions` command provides a simple way to process datasets with raw peaks files into sets of regions of fixed length and the corresponding labels. `examples/TF_peaks_and_memmaped_fasta_DNASE_training.json` is an example config file with all of the reproducible TF peak data in the TF binding challenge. We process these peaks into pairs of regions and label by running:
+The output data config file `examples/genome_and_DNASE_fc_memmaped.json` provides paths to all the data directories. It also contains other attributes of datasets that have not been specified and an empty `task_names`, which we use in the next step to obtain fixed size genomic regions and their labels.
+
+### Processing raw peak files into fixed size genomic regions and labels
+Run the following command to get 1000bp genomic regions tiling DNase peaks with stride (spacing) of 200bp and binary labels for MYC binding:
 ```
-tfdragonn label_regions --data-config-file examples/TF_peaks_and_memmaped_fasta_DNASE_training.json --n-jobs 16 --output-file examples/regions_and_labels_for_TF_peaks_and_memmaped_fasta_DNASE_training.json --prefix /mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/TF_peaks
+tfdragonn label_regions --data-config-file examples/myc_peaks_on_dnase_conservative_and_memmaped_inputs.json --bin-size 200 --flank-size 400 --stride 200 --prefix /mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_new_regions_and_labels_w_ambiguous_stride200_flank400 --output-file examples/myc_conservative_dnase_regions_and_labels_stride200_flank400.json 
 ```
-The new data config file, `examples/regions_and_labels_for_TF_peaks_and_memmaped_fasta_DNASE_training.json`, replaces peak files in `examples/TF_peaks_and_memmaped_fasta_DNASE_training.json` with processed regions and labels files. We are now ready to get started with model development and interpretation.
+The input data config file `examples/myc_peaks_on_dnase_conservative_and_memmaped_inputs.json` has the `dnase_data_dir` and `genome_data_dir` files from the previous step for each dataset with data for MYC. For each dataset, `region_bed` points to the conservative DNase peaks in that celltype - these sepcify the subset of the genome that will be used for model training. Each DNase peak in this example is processed into bins of size 200, specified by `--bin-size`, with consecutive bins placed 200bp apart, which is specified by `--stride`. `feature_beds`, which is required for this step, points to the confident TF peaks for each TF, in this example for MYC only. `ambiguous_feature_beds`, which is optional, points to less confident MYC peaks that we want to ignore during training and evaluation. If a bin overlaps a confident peak, its labeled as positive (value of 1); if it doesn't overlap a confident peak but does overlap an ambiguous peak its labeled as ambiguous (value of -1); if it doesn't overlap any kind of peak its labeled as negative (value of 0). The labels are stored in an `npy` file whose name is based on `--prefix`, the full filename can be found in the output data config file, specified by `--output-file`, in the `labels` attribute of each dataset.
+
+After a bin is labeled, we add extend it 400bp in each direction, specified by `--flank-size`, and the resulting fixed size regions are stored in a `.bed` file for each dataset whose name is based on `--prefix`. The full filename can be found in the output data config file in the `regions` attribute of each dataset. Besides datasets, the input and output data config files have `task_names` which is a list of all the tasks included in `feature_beds` across all datasets in the input data config file. The columns in the `labels` array in the output config file are ordered based on `task_names`. The dictionary-based specification of `feature_beds` allows for simple processing of datasets where you have a lot of tasks across all datasets but only a small subset of tasks with available data in a given dataset (in most celltypes there is data for a small fraction of total TFs assayed). 
+
 ### Model training
 
 ### Model testing

@@ -70,7 +70,16 @@ Run the following command to obtain genomic regions and corresponding model pred
 ```
 tfdragonn predict --data-config-file examples/predict/myc_relaxed_dnase_regions_and_labels_w_ambiguous_stride50_flank400.json --arch-file examples/train/myc_distrubted_batch_training.arch.json  --weights-file examples/train/myc_distrubted_batch_training.weights.h5 --test-chr chr9 --prefix examples/predict/relaxed_dnase_chr9 --output-file examples/predict/predictions.json --verbose --flank-size 400
 ```
-The input data config file `examples/predict/myc_relaxed_dnase_regions_and_labels_w_ambiguous_stride50_flank400.json` points to DNase relaxed peaks processed with stride 50. `--verbose` is an optional argument that, if specified, will show a progress bar. `test-chr` is another optional argument, in this case it runs predictions only for regions in chr9. `--flank-size` is a required argument that is used to trim the input genomic regions to obtain the actual core bin of each region whose label we are predicting - *make sure this corresponds to the `flank-size` used in `label_regions`, otherwise you will get bad evaluation results in the next step!* The output data config file `examples/predict/predictions.json` points to the `.bed` files with trimmed regions and `.npy` files with predictions for each dataset.
+The input data config file `examples/predict/myc_relaxed_dnase_regions_and_labels_w_ambiguous_stride50_flank400.json` points to DNase relaxed peaks processed with stride 50.
+
+#### --flank-size
+ `--flank-size` is a required argument that is used to trim the input genomic regions to obtain the actual core bin of each region whose label we are predicting - **make sure this corresponds to the `flank-size` used in `label_regions`, otherwise you will get bad evaluation results in the next step!**
+
+#### --test-chr and --verbose
+`--verbose` is an optional argument that, if specified, will show a progress bar. `test-chr` is another optional argument, in this case it runs predictions only for regions in chr9.
+
+#### output-file
+The output data config file `examples/predict/predictions.json` points to the `.bed` files with trimmed regions and `.npy` files with predictions for each dataset.
 
 ## Evaluating predictions on dnase regions chromosome-wide
 Most TF binding sites are in DNase peaks but not all. To evaluate the performance of predictions on DNase regions in chr9 in the previous step on the entire chromosome, we first process chr9 into bins spanning the entire chromosome:

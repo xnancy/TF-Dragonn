@@ -1,14 +1,14 @@
 # tf-dragonn
 Reimplementing tf binding with simpler, faster, and more stable code.
 
-## Usage
+# Usage
 The `tfdragonn` package provides a command-line interface with command to process data, train/test model, and interpret data using trained models. To get an overview of the interface run:
 ```
 tfdragonn --help
 ```
 The available commands are `memmap`, `label_regions`, `train`, `predict`, `evaluate`, `test`, and `interpret`. These commands are designed to simplify common steps in model development: data preprocessing, model training/evaluation, and prediction. In the following sections I show how to use these commands to produce competitive predictions of MYC binding for the DREAM challenge.
 
-### Encoding raw input data
+## Encoding raw input data
 The first step is to encode raw input data into arrays that can be indexed directly during training. Run the following command to encode the hg19 genome fasta and dnase bigwigs used in the challenge:
 ```
 tfdragonn memmap --data-config-file examples/genome_fasta_and_DNASE_fc_bigwigs.json --memmap-dir /mnt/data/memmap/TF_challenge_DNASE/ --output-file examples/genome_and_DNASE_fc_memmaped.json
@@ -17,7 +17,7 @@ The input data config file `examples/genome_fasta_and_DNASE_fc_bigwigs.json` has
 
 The output data config file `examples/genome_and_DNASE_fc_memmaped.json` provides paths to all the data directories. It also contains other attributes of datasets that have not been specified and an empty `task_names`, which we use in the next step to obtain fixed size genomic regions and their labels.
 
-### Processing raw peak files into fixed size genomic regions and labels
+## Processing raw peak files into fixed size genomic regions and labels
 Run the following command to get 1000bp genomic regions tiling DNase peaks with stride (spacing) of 200bp and binary labels for MYC binding:
 ```
 tfdragonn label_regions --data-config-file examples/myc_peaks_on_dnase_conservative_and_memmaped_inputs.json --bin-size 200 --flank-size 400 --stride 200 --prefix /mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_new_regions_and_labels_w_ambiguous_stride200_flank400 --output-file examples/myc_conservative_dnase_regions_and_labels_stride200_flank400.json 
@@ -26,8 +26,12 @@ The input data config file `examples/myc_peaks_on_dnase_conservative_and_memmape
 
 After a bin is labeled, we add extend it 400bp in each direction, specified by `--flank-size`, and the resulting fixed size regions are stored in a `.bed` file for each dataset whose name is based on `--prefix`. The full filename can be found in the output data config file in the `regions` attribute of each dataset. Besides datasets, the input and output data config files have `task_names` which is a list of all the tasks included in `feature_beds` across all datasets in the input data config file. The columns in the `labels` array in the output config file are ordered based on `task_names`. The dictionary-based specification of `feature_beds` allows for simple processing of datasets where you have a lot of tasks across all datasets but only a small subset of tasks with available data in a given dataset (in most celltypes there is data for a small fraction of total TFs assayed). 
 
-### Model training
+## Model training
 
-### Model testing
+## Obtaining regions and corresponding predictions with trained models
 
-### Interpreting data with trained models
+## Evaluating predicted regions on a set of labeled regions
+
+## Model testing
+
+## Interpreting data with trained models

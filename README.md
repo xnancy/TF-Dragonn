@@ -1,12 +1,12 @@
 # tf-dragonn
-Reimplementing tf binding with simpler, faster, and more stable code.
+A package with command-line interface to develop, evaluate, and use production-level models of TF binding based on DragoNNs. 
 
 # Usage
 The `tfdragonn` package provides a command-line interface with command to process data, train/test model, and interpret data using trained models. To get an overview of the interface run:
 ```
 tfdragonn --help
 ```
-The available commands are `memmap`, `label_regions`, `train`, `predict`, `evaluate`, `test`, and `interpret`. These commands are designed to simplify common steps in model development: data preprocessing, model training/evaluation, and prediction. In the following sections I show how to use these commands to produce competitive predictions of MYC binding for the DREAM challenge.
+The available commands are `memmap`, `label_regions`, `train`, `predict`, `evaluate`, `test`, and `interpret`. These commands simplify the standard workflow for modeling TF binding, including [processing input data](#encoding-raw-input-data), [processing output data](#Processing-raw-peak-files-into-fixed-size-genomic-regions-and-labels), [model training](#model-training), [standardizing predictions](#obtaining-regions-and-corresponding-predictions-with-trained-models), and (large scale evaluation)[#evaluating-predictions-on-dnase-regions-chromosome-wide]. The following usage of this workflow to produce competitive predictions of MYC binding for the DREAM challenge.
 
 ## Encoding raw input data
 The first step is to encode raw input data into arrays that can be indexed directly during training. Run the following command to encode the hg19 genome fasta and dnase bigwigs used in the challenge:

@@ -1,0 +1,37 @@
+{
+    "task_names": [
+        "MYC"
+    ], 
+    "A549": {
+        "genome_fasta": null, 
+        "labels": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.A549.labels.npy", 
+        "genome_data_dir": "/mnt/data/memmap/genomes/hg19.GRCh37", 
+        "dnase_bigwig": null, 
+        "regions": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.A549.intervals.bed", 
+        "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig"
+    }, 
+    "HeLa-S3": {
+        "genome_fasta": null, 
+        "labels": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.HeLa-S3.labels.npy", 
+        "genome_data_dir": "/mnt/data/memmap/genomes/hg19.GRCh37", 
+        "dnase_bigwig": null, 
+        "regions": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.HeLa-S3.intervals.bed", 
+        "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.HeLa-S3.fc.signal.bigwig"
+    }, 
+    "K562": {
+        "genome_fasta": null, 
+        "labels": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.K562.labels.npy", 
+        "genome_data_dir": "/mnt/data/memmap/genomes/hg19.GRCh37", 
+        "dnase_bigwig": null, 
+        "regions": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.K562.intervals.bed", 
+        "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.K562.fc.signal.bigwig"
+    }, 
+    "MCF-7": {
+        "genome_fasta": null, 
+        "labels": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.MCF-7.labels.npy", 
+        "genome_data_dir": "/mnt/data/memmap/genomes/hg19.GRCh37", 
+        "dnase_bigwig": null, 
+        "regions": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.MCF-7.intervals.bed", 
+        "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.MCF-7.fc.signal.bigwig"
+    }
+}

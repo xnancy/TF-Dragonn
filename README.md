@@ -4,9 +4,31 @@ A package with command-line interface to develop, evaluate, and use production-l
 # Usage
 The `tfdragonn` package provides a command-line interface with command to process data, train/test model, and interpret data using trained models. To get an overview of the interface run:
 ```
-tfdragonn --help
+usage: tfdragonn [-h]
+                 {memmap,label_regions,train,interpret,test,predict,evaluate}
+                 ...
+
+main script for DragoNN modeling of TF Binding.
+
+positional arguments:
+  {memmap,label_regions,train,interpret,test,predict,evaluate}
+                        tf-dragonn command help
+    memmap              This command memory maps raw inputs inthe data config
+                        file for use with streaming models,and writes a new
+                        data config with memmaped inputs.
+    label_regions       Generates fixed length regions and their labels for
+                        each dataset.Writes a new data config file with
+                        regions and labels files.
+    train               model training help
+    interpret           interpretation help
+    test                model testing help
+    predict             model predictions help
+    evaluate            Predictions evaluation help
+
+optional arguments:
+  -h, --help            show this help message and exit
 ```
-The available commands are `memmap`, `label_regions`, `train`, `predict`, `evaluate`, `test`, and `interpret`. These commands simplify the standard workflow for modeling TF binding, including [processing input data](#encoding-raw-input-data), [processing output data](#Processing-raw-peak-files-into-fixed-size-genomic-regions-and-labels), [model training](#model-training), [standardizing predictions](#obtaining-regions-and-corresponding-predictions-with-trained-models), and [large scale evaluation](#evaluating-predictions-on-dnase-regions-chromosome-wide). The following usage of this workflow to produce competitive predictions of MYC binding for the DREAM challenge.
+The interface is designed to simplify the standard workflow for production-level modeling of TF binding, including [processing input data](#encoding-raw-input-data), [processing output data](#Processing-raw-peak-files-into-fixed-size-genomic-regions-and-labels), [model training](#model-training), [standardizing predictions](#obtaining-regions-and-corresponding-predictions-with-trained-models), and [large scale evaluation](#evaluating-predictions-on-dnase-regions-chromosome-wide). The following sections show how to implement this workflow with `tfdragonn` to produce competitive predictions of MYC binding for the DREAM challenge.
 
 ## Encoding raw input data
 The first step is to encode raw input data into arrays that can be indexed directly during training. Run the following command to encode the hg19 genome fasta and dnase bigwigs used in the challenge:

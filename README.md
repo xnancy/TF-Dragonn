@@ -94,3 +94,16 @@ The evaluation is performed by "copying" the predictions on the DNase bins to th
 
 #### --stride
 `stride` is a required argument and has to match the stride used during processing of the data to perform the "copying" correctly - this operation is based on overlap between predicted regions and evaluation regions and the fraction overlap used depends on the stride.
+
+## Formatting model predictions for the DREAM challenge
+We start by running MYC predictions on test chromosomes 1, 8 and 21 in HepG2:
+```
+tfdragonn predict --data-config-file examples/dream_challenge/HepG2_relaxed_dnase_peaks.json --arch-file examples/train/myc_distrubted_batch_training.arch.json --weights-file examples/train/myc_distrubted_batch_training.weights.h5 --output-file examples/dream_challenge/myc_predictions_on_HepG2_relaxed_dnase_peaks.json --prefix examples/dream_challenge/myc_predictions_on_HepG2_relaxed_dnase_peaks --flank-size 400 --bin-size 200 --stride 50 --verbose --test-chr chr1 chr8 chr21
+```
+`bin-size` and `flank-size` are required in this call to `predict` because the data config file has a `region_bed` instead of `regions`, which means that it has to be processed on the fly to obtain predictions.
+
+Next, we map these predictions into the DREAM format of chromosome-wide predictions by running:
+```
+tfdragonn map_predictions --predictions-config-file examples/dream_challenge/myc_predictions_on_HepG2_relaxed_dnase_peaks.json --target-regions examples/dream_challenge/ladder_regions.blacklistfiltered.bed.gz --stride 50 --prefix examples/dream_challenge/
+```
+Mapping of predictions follows the same approach as in `tfdragonn evaluate`, where target regions outside the predicted regions get probabilities of 0. The output file from this command `examples/dream_challenge/L.MYC.HepG2.tab` can be gzipped and submitted directly to the DREAM challenge.

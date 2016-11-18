@@ -127,6 +127,14 @@ def pad_interval(interval, interval_size):
         return interval
 
 
+def remove_flanks(interval, flank_size):
+    """
+    Flank removal utility for BedTool.each
+    """
+    interval.stop -= flank_size
+    interval.start += flank_size
+    return interval
+
 def bin_bed(bedtool, bin_size, stride):
     """
     Bins bed regions.

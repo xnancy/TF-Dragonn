@@ -134,6 +134,10 @@ class Datasets(object):
         return all(dataset.regions is not None for dataset in self.datasets)
 
     @property
+    def include_regions_or_region_bed(self):
+        return all(dataset.region_bed is not None or dataset.regions is not None for dataset in self.datasets)
+
+    @property
     def include_labels(self):
         return all(dataset.labels is not None for dataset in self.datasets)
 

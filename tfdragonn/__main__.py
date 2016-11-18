@@ -87,6 +87,10 @@ def parse_args():
                                                   multiprocessing_parser,
                                                   prefix_parser],
                                          help='model training help')
+    train_parser.add_argument('--arch-file', type=str, required=False,
+                                    help='model architecture json file')
+    train_parser.add_argument('--weights-file', type=str, required=False,
+                                    help='weights hd5 file')
     interpret_parser = subparsers.add_parser('interpret',
                                              parents=[data_config_parser,
                                                       model_files_parser,
@@ -108,6 +112,19 @@ def parse_args():
                                         help='model predictions help')
     predict_parser.add_argument('--flank-size', type=int, required=True,
                                 help='size of flanks in regions. These will be trimmed to output prediction bins.')
+    predict_parser.add_argument('--bin-size', type=int, default=None, required=False,
+                                      help='size of bins for processing region beds')
+    predict_parser.add_argument('--stride', type=int, default=None, required=False,
+                                help='spacing between consecutive bins for processing region beds')
+    map_predictions_parser = subparsers.add_parser('map_predictions',
+                                                   parents=[prefix_parser],
+                                                   help='Mapping predictions across datasets to a uniform set of target regions')
+    map_predictions_parser.add_argument('--predictions-config-file', type=str, required=True,
+                                        help="Config file with regions and predictions")
+    map_predictions_parser.add_argument('--target-regions', type=str, required=True,
+                                        help="Predictions will be mapped to these regions")
+    map_predictions_parser.add_argument('--stride', type=int, default=50, required=True,
+                                        help='Spacing between regions (predicted and/or labeled). Used to determine minimum fraction overlap for scoring. Default: 50.')
     evaluate_parser = subparsers.add_parser('evaluate',
                                             parents=[data_config_parser],
                                             help='Predictions evaluation help')
@@ -267,7 +284,10 @@ def main_train(data_config_file=None,
             raise RuntimeError("Unsupported combination of inputs. Available models support either sequence-only or sequence+dnase!")
         # Initialize, compile, and train
         logger.info("Initializing a {}".format(model_class))
-        model = model_class(interval_length, num_tasks, **architecture_parameters)
+        if arch_file is not None and weights_file is not None:
+            model = model_class(arch_fname=arch_file, weights_fname=weights_file)
+        else:
+            model = model_class(interval_length, num_tasks, **architecture_parameters)
         logger.info("Compiling {}..".format(model_class))
         model.compile() #y=y_train) ## TODO: proper task scaling at batch level instead
         logger.info("Starting to train with streaming data..")
@@ -345,29 +365,47 @@ def main_test(data_config_file=None,
 def main_predict(data_config_file=None,
                  test_chr=None,
                  flank_size=None,
+                 bin_size=None,
+                 stride=None,
+                 genome='hg19',
                  verbose=None,
                  n_jobs=None,
                  arch_file=None,
                  weights_file=None,
                  prefix=None,
                  output_file=None):
+    from .intervals import filter_interval_by_chrom, remove_flanks, bin_bed, filter_interval_by_length
     # get matched region beds and feature/tf beds
     logger.info("parsing data config file..")
     datasets = parse_data_config_file(data_config_file)
     # get regions and labels
-    if datasets.include_regions and datasets.include_labels:
-        dataset2regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
-                                      for dataset_id, dataset in datasets}
+    if datasets.include_regions:
+        dataset2regions = {dataset_id: BedTool(dataset.regions) for dataset_id, dataset in datasets}
     else: ## TODO: call main_label_regions, continue with output data config file
-        raise RuntimeError("data config file doesnt include regions and labels for each dataset. Run the label_regions command first!")
+        logger.info("data config file doesnt include regions and labels for each dataset. Processing data into fixed size regions..")
+        if not datasets.include_regions_or_region_bed:
+            raise RuntimeError("Found at least one dataset without regions that doesn't include a region bed. Exiting!")
+        if bin_size is None or stride is None:
+            raise RuntimeError("--bin-size and --stride must be specified to process data!")
+        data_dict = datasets.to_dict()
+        dataset2regions = {}
+        for dataset_id, dataset in datasets:
+            if dataset.regions is not None:
+                dataset2regions[dataset_id] = BedTool(dataset.regions)
+            else:
+                logger.info("Procesing region bed in dataset {}..".format(dataset_id))
+                bins = bin_bed(BedTool(dataset.region_bed), bin_size=bin_size, stride=stride)
+                bins = bins.set_chromsizes(genome)
+                regions = bins.slop(b=flank_size)
+                regions = regions.each(filter_interval_by_length, bin_size + 2*flank_size).saveas()
+                dataset2regions[dataset_id] = regions
     # get test subset if specified
     if test_chr is not None:
         logger.info("Subsetting test data to {}...".format(test_chr))
-        for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
-            _, regions_test, _, y_test = train_test_chr_split(regions, labels, test_chr)
-            dataset2regions_and_labels[dataset_id] = (regions_test, y_test)
+        for dataset_id, regions in dataset2regions.items():
+            dataset2regions[dataset_id] = regions.each(filter_interval_by_chrom, test_chr).saveas()
     # get data extractors
-    interval_length = dataset2regions_and_labels.values()[0][0][0].length
+    interval_length = dataset2regions.values()[0][0].length
     dataset2extractors = datasets.get_dataset2extractors(int(interval_length/2))
     # initialize model and test
     if datasets.memmaped:
@@ -380,14 +418,12 @@ def main_predict(data_config_file=None,
         model = model_class(arch_fname=arch_file, weights_fname=weights_file)
         logger.info("Running predictions...")
         data_dict = datasets.to_dict()
-        for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
+        for dataset_id, regions in dataset2regions.items():
             preds = model.predict(regions, dataset2extractors[dataset_id], batch_size=500, verbose=verbose)
             regions_fname = os.path.abspath("{}.{}.regions.bed".format(prefix, dataset_id))
             preds_fname = os.path.abspath("{}.{}.predictions.npy".format(prefix, dataset_id))
             # trim flanks from regions
-            for i in xrange(len(regions)):
-                regions[i].start += flank_size
-                regions[i].stop -= flank_size
+            regions = regions.each(remove_flanks, flank_size)
             BedTool(regions).saveas().moveto(regions_fname)
             np.save(preds_fname, preds)
             for key, value in data_dict[dataset_id].items():
@@ -454,6 +490,46 @@ def main_evaluate(data_config_file=None,
         print('Metrics across all datasets:\n{}\n'.format(combined_classification_result), end='')
 
 
+def main_map_predictions(predictions_config_file=None,
+                         target_regions=None,
+                         prefix=None,
+                         stride=None):
+    from .intervals import bed_intersection_scores
+    import pandas as pd
+    # get predicted regions and predicted probabilities
+    logger.info("parsing predictions config file and target regions..")
+    datasets_preds = parse_data_config_file(predictions_config_file)
+    if len(datasets_preds.task_names) > 1:
+        raise RuntimeError("map_predictions doesn't support mapping of multitask predictions!")
+    if datasets_preds.include_regions and datasets_preds.include_labels:
+        dataset2preds_regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
+                                            for dataset_id, dataset in datasets_preds}
+    else:
+        raise RuntimeError("The predictions config file doesnt include predicted regions and labels for each dataset!")
+    # intersect predictions and get classification metrics
+    logger.info("Mapping predictions to target regions..")
+    task_name = datasets_preds.task_names[0]
+    for dataset_id, (preds_regions, preds_labels) in dataset2preds_regions_and_labels.items():
+        logger.info("Mapping predictions in dataset {}...".format(dataset_id))
+        preds_df = BedTool(preds_regions).to_dataframe()
+        preds_df.iloc[:, 3] = preds_labels
+        preds_bedtool = BedTool.from_dataframe(preds_df)
+        if stride is not None:
+            interval_length = preds_bedtool[0].length
+            f = 1 - (stride - 1) / interval_length
+            F = 1 - (stride - 1) / interval_length
+        else:
+            f = 0.5
+            F = 0.5
+        predictions = bed_intersection_scores(BedTool(target_regions), preds_bedtool, score_index=4, f=f, F=F)
+        target_regions_df = BedTool(target_regions).to_dataframe()
+        target_regions_df = target_regions_df.join(pd.DataFrame(predictions))
+        target_regions_and_predictions = BedTool.from_dataframe(target_regions_df)
+        target_regions_and_predictions.saveas("{}L.{}.{}.tab".format(prefix, task_name, dataset_id))
+        logger.info("Saved target regions with predictions to {}L.{}.{}.tab".format(prefix, task_name, dataset_id))
+    logger.info("Done!")
+
+
 def main_interpret(data_config_file=None,
                    prefix=None,
                    n_jobs=None,
@@ -509,6 +585,7 @@ def main():
                          'label_regions': main_label_regions,
                          'train': main_train,
                          'predict': main_predict,
+                         'map_predictions': main_map_predictions,
                          'evaluate': main_evaluate,
                          'interpret': main_interpret,
                          'test': main_test}

@@ -1,0 +1,16 @@
+{
+    "task_names": [
+        "MYC"
+    ], 
+    "HepG2": {
+        "genome_fasta": null, 
+        "ambiguous_feature_beds": null, 
+        "labels": "/users/jisraeli/src/tf-dragonn/examples/dream_challenge/myc_predictions_on_HepG2_relaxed_dnase_peaks.HepG2.predictions.npy", 
+        "genome_data_dir": null, 
+        "dnase_bigwig": null, 
+        "regions": "/users/jisraeli/src/tf-dragonn/examples/dream_challenge/myc_predictions_on_HepG2_relaxed_dnase_peaks.HepG2.regions.bed", 
+        "dnase_data_dir": null, 
+        "region_bed": null, 
+        "feature_beds": null
+    }
+}

@@ -82,13 +82,13 @@ The input data config file `examples/predict/myc_relaxed_dnase_regions_and_label
 The output data config file `examples/predict/predictions.json` points to the `.bed` files with trimmed regions and `.npy` files with predictions for each dataset.
 
 ## Evaluating predictions on dnase regions chromosome-wide
-Most TF binding sites are in DNase peaks but not all. To evaluate the performance of predictions on DNase regions in chr9 in the previous step on the entire chromosome, we first process chr9 into bins spanning the entire chromosome:
+Most TF binding sites are in DNase peaks but not all. To evaluate the performance of predictions on DNase regions in chr9 in the previous step on the entire chromosome, we first process a black list filtered chr9 into bins spanning the entire chromosome:
 ```
-tfdragonn label_regions --data-config-file examples/evaluate/myc_peaks_on_chr9_and_memmaped_inputs.json --bin-size 200 --flank-size 0 --stride 50 --prefix /mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/models/tfdragonn_regions_and_labels/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0 --output-file examples/evaluate/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.json
+tfdragonn label_regions --data-config-file examples/evaluate/myc_peaks_on_chr9_blacklistfiltered_and_memmaped_inputs.json --bin-size 200 --flank-size 0 --stride 50 --output-file examples/evaluate/myc_chr9_blacklistfiltered_regions_and_labels_stride50_flank0.json --prefix examples/evaluate/myc_chr9_blacklistfiltered_regions_and_labels_stride50_flank0
 ```
 Then, we evaluate predictions on DNase bins wrt chromosome-wide bins by running:
 ```
-tfdragonn evaluate --data-config-file examples/evaluate/myc_chr9_regions_and_labels_w_ambiguous_stride50_flank0.json --predictions-config-file examples/predict/predictions.json --stride 50
+tfdragonn evaluate --data-config-file examples/evaluate/myc_chr9_blacklistfiltered_regions_and_labels_stride50_flank0.json --predictions-config-file examples/predict/predictions.json --stride 50
 ```
 The evaluation is performed by "copying" the predictions on the DNase bins to the corresponding bins throughout chromosome 9 and setting predictions elsewhere to 0s. This prediction and evaluation approach maintains the FDR thersholds and effectively "corrects" the recalls to account for TF sites outside DNase regions. As we expand training to cover larger subsets of the genome, beyond DNase regions, the recalls during model training/testing will get closer to the the recalls that would come out from this evaluation.
 

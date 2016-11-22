@@ -91,6 +91,8 @@ def parse_args():
                                     help='model architecture json file')
     train_parser.add_argument('--weights-file', type=str, required=False,
                                     help='weights hd5 file')
+    train_parser.add_argument('--training-config-file', type=str, required=False,
+                              help='json specifying arguments for training.')
     interpret_parser = subparsers.add_parser('interpret',
                                              parents=[data_config_parser,
                                                       model_files_parser,
@@ -215,6 +217,7 @@ def main_label_regions(data_config_file=None,
 def main_train(data_config_file=None,
                prefix=None,
                n_jobs=None,
+               training_config_file=None,
                arch_file=None,
                weights_file=None):
     # get matched region beds and feature/tf beds
@@ -288,8 +291,13 @@ def main_train(data_config_file=None,
             model = model_class(arch_fname=arch_file, weights_fname=weights_file)
         else:
             model = model_class(interval_length, num_tasks, **architecture_parameters)
-        logger.info("Compiling {}..".format(model_class))
-        model.compile() #y=y_train) ## TODO: proper task scaling at batch level instead
+        if training_config_file is not None:
+            logger.info("Compiling {} with training configs in {}..".format(model_class, training_config_file))
+            training_args = json.load(open(training_config_file))
+            model.compile(**training_args)
+        else:
+            logger.info("Compiling {}..".format(model_class))
+            model.compile() #y=y_train) ## TODO: proper task scaling at batch level instead
         logger.info("Starting to train with streaming data..")
         #model.train(intervals_train, y_train, intervals_valid, y_valid, fasta_extractor,
         #            save_best_model_to_prefix=prefix)

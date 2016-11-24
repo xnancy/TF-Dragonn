@@ -51,11 +51,11 @@ def get_weighted_binary_crossentropy(w0_weights, w1_weights):
 
 
 def build_masked_loss(loss_function, mask_value=AMBIG_LABEL):
-    def masked_loss_function(y_true, y_pred):
+    def binary_crossentropy(y_true, y_pred):
         mask = K.cast(K.not_equal(y_true, mask_value), K.floatx())
         return loss_function(y_true * mask, y_pred * mask)
 
-    return masked_loss_function
+    return binary_crossentropy
 
 
 def masked_binary_crossentropy(mask_value=AMBIG_LABEL):
@@ -115,7 +115,7 @@ class SequenceClassifier(object):
         else:
             raise RuntimeError("Model initialization requires seq_length and num_tasks or arch/weights files!")
 
-    def compile(self, optimizer='adam', lr=0.001, y=None):
+    def compile(self, optimizer='adam', lr=0.0003, y=None):
         """
         Defines learning parameters and compiles the model.
 
@@ -296,14 +296,26 @@ class StreamingSequenceClassifier(SequenceClassifier):
                       'were saved to {1}.arch.json and {1}.weights.h5'.format(
                     best_epoch, save_best_model_to_prefix))
 
-    def predict(self, intervals, fasta_extractor, batch_size=128):
+    def predict(self, intervals, fasta_extractor, batch_size=128, verbose=False):
         """
         Generates data and returns a single 2d array with predictions.
         """
         generator = generate_from_intervals(
             intervals, fasta_extractor, indefinitely=False, batch_size=batch_size)
-        predictions = [np.vstack(self.model.predict_on_batch(batch))
-                       for batch in generator]
+        if verbose:
+            process = psutil.Process(os.getpid())
+            progbar = Progbar(target=len(intervals))
+            predictions = []
+            batch_indx = 1
+            for batch in generator:
+                predictions.append(np.vstack(self.model.predict_on_batch(batch)))
+                progbar.update(batch_indx*batch_size)
+                rss_minus_shr_memory = (process.memory_info().rss -  process.memory_info().shared)  / 10**6
+                progbar.update(batch_indx*batch_size, values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+                batch_indx += 1
+        else:
+            predictions = [np.vstack(self.model.predict_on_batch(batch))
+                           for batch in generator]
         return np.vstack(predictions)
 
     def compare_predict_and_stream_predict(self, intervals, fasta_extractor, batch_size=128):
@@ -318,7 +330,7 @@ class StreamingSequenceClassifier(SequenceClassifier):
         return ClassificationResult(y, predictions, task_names=task_names)
 
     def test_on_multiple_datasets(self, dataset2test_regions_and_labels, dataset2fasta_extractor,
-                                  batch_size=128, task_names=None):
+                                  batch_size=128, task_names=None, verbose=False):
         """
         Returns dctionary with dataset ids as keys and classification results as values, and a combined classification result.
         """
@@ -326,7 +338,7 @@ class StreamingSequenceClassifier(SequenceClassifier):
         predictions_list = []
         labels_list = []
         for dataset_id, (regions, labels) in dataset2test_regions_and_labels.items():
-            predictions = self.predict(regions, dataset2fasta_extractor[dataset_id], batch_size=batch_size)
+            predictions = self.predict(regions, dataset2fasta_extractor[dataset_id], batch_size=batch_size, verbose=verbose)
             dataset2classification_result[dataset_id] = ClassificationResult(labels, predictions, task_names=task_names)
             predictions_list.append(predictions)
             labels_list.append(labels)
@@ -363,7 +375,7 @@ class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
     def __init__(self, seq_length=None, num_tasks=None, arch_fname=None, weights_fname=None,
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
-                 pool_width=35, L1=0, dropout=0.0,
+                 pool_width=25, L1=0, dropout=0.0,
                  num_epochs=100, verbose=1):
         self.saved_params = locals()
         self.verbose = verbose
@@ -411,7 +423,6 @@ class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
             ))
             self.model.add(AveragePooling2D(pool_size=(1, pool_width)))
             self.model.add(Flatten())
-            #self.model.add(Dense(200)) # add fc_layer_sizes to init
             self.model.add(Dense(output_dim=self.num_tasks))
             self.model.add(Activation('sigmoid'))
         else:
@@ -419,16 +430,26 @@ class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
 
     def train_on_multiple_datasets(self, dataset2train_regions_and_labels, dataset2valid_regions_and_labels, dataset2extractors,
                                    task_names=None, save_best_model_to_prefix=None,
-                                   early_stopping_metric='auROC', num_epochs=100,
-                                   batch_size=128, epoch_size=250000,
+                                   early_stopping_metric='auPRC', num_epochs=100,
+                                   batch_size=32, epoch_size=250000,
                                    early_stopping_patience=5, verbose=True, reweigh_loss_func=False):
         process = psutil.Process(os.getpid())
         # define training generator
         dataset2training_generator = {}
         for dataset_id, (regions, labels) in dataset2train_regions_and_labels.items():
-           dataset2training_generator[dataset_id] = generate_from_intervals_and_labels(regions, labels, dataset2extractors[dataset_id],
-                                                                                       batch_size=batch_size, indefinitely=True)
-        training_generator = roundrobin(*dataset2training_generator.values())
+            dataset2training_generator[dataset_id] = generate_from_intervals_and_labels(regions, labels, dataset2extractors[dataset_id],
+                                                                                        batch_size=batch_size, indefinitely=True)
+        if len(dataset2training_generator) > 1:
+            def concatenate_training_generators(generators):
+                for batches in zip(*generators):
+                    sequence = np.concatenate([batch[0][0] for batch in batches], axis=0)
+                    dnase = np.concatenate([batch[0][1] for batch in batches], axis=0)
+                    y = np.concatenate([batch[1] for batch in batches], axis=0)
+                    yield ([sequence, dnase], y)
+            training_generator = concatenate_training_generators(dataset2training_generator.values())
+            batch_size *= len(dataset2training_generator)
+        else:
+            training_generator = roundrobin(*dataset2training_generator.values())
         # define training loop
         valid_metrics = []
         best_metric = np.inf if early_stopping_metric == 'Loss' else -np.inf

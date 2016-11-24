@@ -1,3 +1,5 @@
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 import pybedtools
 from pybedtools import BedTool, genome_registry
@@ -111,7 +113,7 @@ def filter_by_chrom_sizes(interval, genome_chrom_sizes, min_distance_to_chrom_ed
         return False
 
 
-def pad_interval(interval, interval_size):
+def pad_interval(interval, interval_size, stride=None):
     """
     Interval padding utility for BedTool.each
 
@@ -120,11 +122,20 @@ def pad_interval(interval, interval_size):
     Otherwise, return False
     """
     length = interval.stop - interval.start
+    if stride is None:
+        stride = int(length / 2)
+    if length > (interval_size - stride):
+        interval.stop += interval_size - length
+        return interval
+    else:
+        return False
+    """
     if length < interval_size / 2.0:
         return False
     else:
         interval.stop += interval_size - length
         return interval
+    """
 
 
 def remove_flanks(interval, flank_size):
@@ -141,7 +152,7 @@ def bin_bed(bedtool, bin_size, stride):
     """
     windows = bedtool.window_maker(bedtool, w=bin_size, s=stride, i="winnum")
     # pad/remove last window of each interval
-    return windows.each(pad_interval, bin_size)
+    return windows.each(pad_interval, bin_size, stride)
 
 
 def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
@@ -175,9 +186,10 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
         assert len(ambiguous_feature_bedtools) == len(true_feature_bedtools)
         ambiguous_feature_bedtools = [BedTool(bedtool) if bedtool is not None else None
                                       for bedtool in ambiguous_feature_bedtools]
-    # bin region_bedtools
+    # merge and bin region_bedtools
     if region_bedtool is not None:
-        bins = bin_bed(BedTool(region_bedtool), bin_size=bin_size, stride=stride)
+        region_bedtool = BedTool(region_bedtool).sort().merge()
+        bins = bin_bed(region_bedtool, bin_size=bin_size, stride=stride)
     else: # use union of true peak bedtools
         bedtools_to_merge = [bedtool for bedtool in true_feature_bedtools if bedtool is not None]
         region_bedtool = BedTool.cat(*bedtools_to_merge, postmerge=True, force_truncate=True)

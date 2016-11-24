@@ -125,7 +125,7 @@ def parse_args():
                                         help="Config file with regions and predictions")
     map_predictions_parser.add_argument('--target-regions', type=str, required=True,
                                         help="Predictions will be mapped to these regions")
-    map_predictions_parser.add_argument('--stride', type=int, default=50, required=True,
+    map_predictions_parser.add_argument('--stride', type=int, default=None, required=False,
                                         help='Spacing between regions (predicted and/or labeled). Used to determine minimum fraction overlap for scoring. Default: 50.')
     evaluate_parser = subparsers.add_parser('evaluate',
                                             parents=[data_config_parser],
@@ -134,6 +134,7 @@ def parse_args():
                                  help="Config file with regions and predictions")
     evaluate_parser.add_argument('--stride', type=int, default=None,
                                  help='Spacing between regions (predicted and/or labeled). Used to determine minimum fraction overlap for scoring if specified. Default fraction overlap is 0.5 (assumes stride = region size).')
+    evaluate_parser.add_argument('--test-chr', type=str, nargs="+", help="Chromosomes to subset data.")
     # return command and command arguments
     args = vars(parser.parse_args())
     command = args.pop("command", None)
@@ -450,6 +451,7 @@ def main_predict(data_config_file=None,
 
 def main_evaluate(data_config_file=None,
                   predictions_config_file=None,
+                  test_chr=None,
                   stride=None):
     from .intervals import bed_intersection_scores
     from .metrics import ClassificationResult
@@ -461,6 +463,14 @@ def main_evaluate(data_config_file=None,
                                       for dataset_id, dataset in datasets}
     else: ## TODO: call main_label_regions, continue with output data config file
         raise RuntimeError("data config file doesnt include regions and labels for each dataset. Run the label_regions command first!")
+    # subset regions and labels if test-chr is specified
+    # get test subset if specified
+    if test_chr is not None:
+        logger.info("Subsetting data to {}...".format(test_chr))
+        for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
+            ( _, regions_test,
+              _, y_test ) = train_test_chr_split(regions, labels, ["chr9"])
+            dataset2regions_and_labels[dataset_id] = (regions_test, y_test)
     # get predicted regions and predicted probabilities
     logger.info("parsing predictions config file..")
     datasets_preds = parse_data_config_file(predictions_config_file)
@@ -483,8 +493,8 @@ def main_evaluate(data_config_file=None,
             f = 1 - (stride - 1) / interval_length
             F = 1 - (stride - 1) / interval_length
         else:
-            f = 0.5
-            F = 0.5
+            f = 1
+            F = 1
         predictions = bed_intersection_scores(BedTool(regions), preds_bedtool, score_index=4, f=f, F=F)
         dataset2classification_result[dataset_id] = ClassificationResult(labels, predictions)
         predictions_list.append(predictions)
@@ -527,13 +537,13 @@ def main_map_predictions(predictions_config_file=None,
             f = 1 - (stride - 1) / interval_length
             F = 1 - (stride - 1) / interval_length
         else:
-            f = 0.5
-            F = 0.5
+            f = 1
+            F = 1
         predictions = bed_intersection_scores(BedTool(target_regions), preds_bedtool, score_index=4, f=f, F=F)
         target_regions_df = BedTool(target_regions).to_dataframe()
         target_regions_df = target_regions_df.join(pd.DataFrame(predictions))
         target_regions_and_predictions = BedTool.from_dataframe(target_regions_df)
-        target_regions_and_predictions.saveas("{}L.{}.{}.tab".format(prefix, task_name, dataset_id))
+        target_regions_and_predictions.saveas("{}L.{}.{}.tab.gz".format(prefix, task_name, dataset_id))
         logger.info("Saved target regions with predictions to {}L.{}.{}.tab".format(prefix, task_name, dataset_id))
     logger.info("Done!")
 

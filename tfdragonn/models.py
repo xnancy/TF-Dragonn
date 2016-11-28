@@ -452,7 +452,12 @@ class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
             training_generator = roundrobin(*dataset2training_generator.values())
         # define training loop
         valid_metrics = []
-        best_metric = np.inf if early_stopping_metric == 'Loss' else -np.inf
+        print("Getting initial validation metrics..")
+        _, epoch_valid_metrics = self.test_on_multiple_datasets(dataset2valid_regions_and_labels, dataset2extractors,
+                                                                              task_names=task_names)
+        valid_metrics.append(epoch_valid_metrics)
+        best_metric = epoch_valid_metrics[early_stopping_metric].mean()
+        print('Initial {}: {:.3f}'.format(early_stopping_metric, best_metric))
         samples_per_epoch = len(y_train) if epoch_size is None else epoch_size
         batches_per_epoch = int(samples_per_epoch / batch_size)
         samples_per_epoch = batch_size * batches_per_epoch

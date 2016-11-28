@@ -50,9 +50,5 @@
     "PC-3": {
 	"genome_fasta": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.genome.fa",
 	"dnase_bigwig": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/DNASE/fold_coverage_wiggles/DNASE.PC-3.fc.signal.bigwig"
-    },
-    "SK-N-SH": {
-	"genome_fasta": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.genome.fa",
-	"dnase_bigwig": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/DNASE/fold_coverage_wiggles/DNASE.SK-N-SH.fc.signal.bigwig"
     }
 }

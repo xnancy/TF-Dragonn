@@ -1,115 +1,54 @@
 {
-    "task_names": null, 
     "A459": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "GM12878": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.GM12878.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "H1-hESC": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.H1-hESC.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "HCT116": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.HCT116.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "HeLa-S3": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.HeLa-S3.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "HepG2": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.HepG2.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "IMR90": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.IMR90.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "induced_pluripotent_stem_cell": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.induced_pluripotent_stem_cell.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "K562": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.K562.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "liver": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.liver.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "MCF-7": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.MCF-7.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "Panc1": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.Panc1.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 
     "PC-3": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.PC-3.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
-    }, 
-    "SK-N-SH": {
-        "labels": null, 
-        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa", 
-        "regions": null, 
-        "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.SK-N-SH.fc.signal.bigwig", 
-        "region_bed": null, 
-        "feature_beds": null
+        "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }
 }

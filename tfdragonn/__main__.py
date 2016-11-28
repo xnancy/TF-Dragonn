@@ -13,7 +13,7 @@ from genomedatalayer.extractors import (
     FastaExtractor, MemmappedBigwigExtractor, MemmappedFastaExtractor
 )
 
-from .datasets import Dataset, parse_data_config_file
+from .datasets import parse_data_config_file, parse_raw_input_config_file, raw_input2processed_input
 from .intervals import get_tf_predictive_setup, train_test_chr_split, train_valid_test_chr_split
 
 # setup logging
@@ -27,11 +27,8 @@ logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 logger.propagate = False
 
-RAW_INPUT_KEYS = ['dnase_bigwig', 'genome_fasta']
 input2memmap_extractor = {'dnase_bigwig': MemmappedBigwigExtractor,
                           'genome_fasta': MemmappedFastaExtractor}
-input2memmap_input = {'dnase_bigwig': 'dnase_data_dir',
-                      'genome_fasta': 'genome_data_dir'}
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -54,21 +51,19 @@ def parse_args():
     prefix_parser = argparse.ArgumentParser(add_help=False)
     prefix_parser.add_argument('--prefix', type=str, required=True,
                                help='prefix to output files')
-    memmap_dir_parser = argparse.ArgumentParser(add_help=False)
-    memmap_dir_parser.add_argument('--memmap-dir', type=str, required=True,
-                               help='directories with memmaped data are created in this directory.')
     predict_opts_parser = argparse.ArgumentParser(add_help=False)
     predict_opts_parser.add_argument('--test-chr', type=str, nargs="+", help="Chromosomes to subset test data.")
     predict_opts_parser.add_argument('--verbose', action='store_true', default=False, help="Shows prediction progress bar")
     # define commands
     subparsers = parser.add_subparsers(help='tf-dragonn command help', dest='command')
     memmap_parser = subparsers.add_parser('memmap',
-                                         parents=[data_config_parser,
-                                                  memmap_dir_parser,
-                                                  output_file_parser],
-                                         help='This command memory maps raw inputs in'+
-                                              'the data config file for use with streaming models,'+
-                                              'and writes a new data config with memmaped inputs. ')
+                                          help="""This command memory maps raw inputs in
+                                          the data config file for use with streaming models,
+                                          and writes a new data config with memmaped inputs.""")
+    memmap_parser.add_argument('--memmap-dir', type=str, required=True,
+                               help='directories with memmaped data are created in this directory.')
+    memmap_parser.add_argument('--raw-inputs-config-file', type=str, required=True, help="Raw input configuration file.")
+    memmap_parser.add_argument('--processed-inputs-config-file', type=str, required=True, help="Processed input configuration file to write.")
     label_regions_parser = subparsers.add_parser('label_regions',
                                                  parents=[data_config_parser,
                                                           multiprocessing_parser,
@@ -142,35 +137,35 @@ def parse_args():
     return command, args
 
 
-def main_memmap(data_config_file=None,
+def main_memmap(raw_inputs_config_file=None,
                 memmap_dir=None,
-                output_file=None):
+                processed_inputs_config_file=None):
     """
     Memmaps every raw input in the data config file.
     Returns new data config file with memmaped inputs.
     """
     import ntpath
-    data = parse_data_config_file(data_config_file)
-    data_dict = data.to_dict()
-    logger.info("Memapping input data in {}...".format(data_config_file))
-    for dataset_id, dataset in data:
-        memmap_dataset_dict = dataset.to_dict()
-        for input_key in RAW_INPUT_KEYS:
-            raw_input_fname = getattr(dataset, input_key)
-            if raw_input_fname is not None:
-                input_memmap_dir = os.path.join(memmap_dir, ntpath.basename(raw_input_fname))
-                logger.info("Encoding {} in {}...".format(raw_input_fname, input_memmap_dir))
-                extractor = input2memmap_extractor[input_key]
+    raw_inputs_config = parse_raw_input_config_file(raw_inputs_config_file)
+    dataset_id2processed_inputs = collections.OrderedDict()
+    logger.info("Processing input data in {}...".format(raw_inputs_config_file))
+    for dataset_id, raw_inputs in raw_inputs_config:
+        processed_inputs = {}
+        for input_key, raw_input_fname in raw_inputs.__dict__.items():
+            if raw_input_fname is None:
+                processed_inputs[raw_input2processed_input[input_key]] = None
+                continue
+            input_memmap_dir = os.path.join(memmap_dir, ntpath.basename(raw_input_fname))
+            logger.info("Encoding {} in {}...".format(raw_input_fname, input_memmap_dir))
+            extractor = input2memmap_extractor[input_key]
+            try:
                 extractor.setup_mmap_arrays(raw_input_fname, input_memmap_dir)
-                # update the dataset in data
-                del memmap_dataset_dict[input_key]
-                memmap_dataset_dict[input2memmap_input[input_key]] = input_memmap_dir
-                data_dict[dataset_id] = memmap_dataset_dict
-                logger.info("Replaced {}: {} with\n\t\t\t\t\t\t  {}: {} in\n\t\t\t\t\t\t  {} dataset".format(
-                    input_key, raw_input_fname, input2memmap_input[input_key], input_memmap_dir, dataset_id))
+            except OSError:
+                pass
+            processed_inputs[raw_input2processed_input[input_key]] = input_memmap_dir
+        dataset_id2processed_inputs[dataset_id] = processed_inputs
     # write json with memmaped data
-    json.dump(data_dict, open(output_file, "w"), indent=4)
-    logger.info("Wrote memaped data config file to {}.".format(output_file))
+    json.dump(dataset_id2processed_inputs, open(processed_inputs_config_file, "w"), indent=4)
+    logger.info("Wrote processed inputs config file to {}.".format(processed_inputs_config_file))
     logger.info("Done!")
 
 

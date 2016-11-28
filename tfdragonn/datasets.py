@@ -1,3 +1,4 @@
+from abc import abstractmethod, ABCMeta
 from builtins import zip
 import collections
 import inspect
@@ -268,3 +269,148 @@ def parse_data_config_file(data_config_file):
                     data[dataset_id] = Dataset(**dataset)
 
     return Datasets(data, task_names)
+
+
+class RawInputs(object):
+    @property
+    def has_dnase_bigwig(self):
+        return self.dnase_bigwig is not None
+
+    @property
+    def has_genome_fasta(self):
+        return self.genome_fasta is not None
+
+    def __init__(self, dnase_bigwig=None, genome_fasta=None):
+        self.dnase_bigwig = dnase_bigwig
+        self.genome_fasta = genome_fasta
+
+
+class ProcessedInputs(object):
+    @property
+    def has_dnase_data_dir(self):
+        return self.dnase_data_dir is not None
+
+    @property
+    def has_genome_data_dir(self):
+        return self.genome_data_dir is not None
+
+    def __init__(self, dnase_data_dir=None, genome_data_dir=None):
+        self.dnase_data_dir = dnase_data_dir
+        self.genome_data_dir = genome_data_dir
+
+raw_input2processed_input = {"dnase_bigwig": "dnase_data_dir",
+                             "genome_fasta": "genome_data_dir"}
+
+def check_property_consistency(config, target_property):
+    dataset_id1, dataset_class1 = next(config.__iter__())
+    expected_property_value = getattr(dataset_class1, target_property)
+    for dataset_id2, dataset_class2 in config:
+        if getattr(dataset_class2, target_property) == expected_property_value:
+            pass
+        else:
+            return (dataset_id1, dataset_id2)
+    return True
+
+
+class InputsConfig(object):
+     __metaclass__ = ABCMeta
+
+     @abstractmethod
+     def __iter__(self):
+         pass
+
+     @abstractmethod
+     def __init__(self):
+         pass
+
+     def check_property_consistency(self, target_property):
+         dataset_id1, dataset_class1 = next(self.__iter__())
+         expected_property_value = getattr(dataset_class1, target_property)
+         for dataset_id2, dataset_class2 in self:
+             if getattr(dataset_class2, target_property) == expected_property_value:
+                 pass
+             else:
+                 return (dataset_id1, dataset_id2)
+             return True
+
+
+class RawInputsConfig(InputsConfig):
+    """
+    A class for the raw inputs config file.
+
+    Parameters
+    ----------
+    dataset_id2raw_inputs : dict
+        keys are data set id strigs, values are instances of RawInputs.
+    """
+    def __init__(self, dataset_id2raw_inputs):
+        self.dataset_ids = dataset_id2raw_inputs.keys()
+        self.raw_inputs_list = dataset_id2raw_inputs.values()
+        # check for consistent raw inputs
+        rv = check_property_consistency(self, "has_genome_fasta")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent genome fasta types!".format(dataset_id1, dataset_id2))
+        rv = self.check_property_consistency("has_dnase_bigwig")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent dnase bigwig types!".format(dataset_id1, dataset_id2))
+
+    def __iter__(self):
+        return zip(self.dataset_ids, self.raw_inputs_list)
+
+
+class ProcessedInputsConfig(InputsConfig):
+    """
+    A class for the processed inputs config file.
+
+    Parameters
+    ----------
+    dataset_id2processed_inputs : dict
+        keys are data set id strigs, values are instances of ProcessedInputs.
+    """
+    def __init__(self, dataset_id2processed_inputs):
+        self.dataset_ids = dataset_id2processed_inputs.keys()
+        self.processed_inputs_list = dataset_id2processed_inputs.values()
+        # check for consistent processed inputs
+        rv = self.check_property_consistency( "has_genome_data_dir")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent genome data dir types!".format(dataset_id1, dataset_id2))
+        rv = check_property_consistency(self, "has_dnase_data_dir")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent dnase data dir types!".format(dataset_id1, dataset_id2))
+
+    def __iter__(self):
+        return zip(self.dataset_ids, self.raw_inputs_list)
+
+
+def parse_raw_input_config_file(raw_input_config_fname):
+    """
+    Returns instance of RawInputsConfig
+    """
+    dataset_id2raw_inputs = json.load(open(raw_input_config_fname), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, raw_inputs in dataset_id2raw_inputs.items():
+        dataset_id2raw_inputs[dataset_id] = RawInputs(**raw_inputs)
+
+    return RawInputsConfig(dataset_id2raw_inputs)
+
+
+def parse_processed_input_config_file(processed_input_config_fname):
+    """
+    Returns instance of RawInputsConfig
+    """
+    dataset_id2processed_inputs = json.load(open(processed_input_config_fname), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, processed_inputs in dataset_id2processed_inputs.items():
+        dataset_id2raw_inputs[dataset_id] = ProcessedInputs(**processed_inputs)
+
+    return ProcessedInputsConfig(dataset_id2raw_inputs)

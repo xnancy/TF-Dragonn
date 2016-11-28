@@ -33,16 +33,16 @@ The interface is designed to simplify the standard workflow for production-level
 ## Encoding raw input data
 The first step is to encode raw input data into arrays that can be indexed directly during training. Run the following command to encode the hg19 genome fasta and dnase bigwigs used in the challenge:
 ```
-tfdragonn memmap --data-config-file examples/memmap/genome_fasta_and_DNASE_fc_bigwigs.json --memmap-dir /mnt/data/memmap/TF_challenge_DNASE/ --output-file examples/memmap/genome_and_DNASE_fc_memmaped.json
+tfdragonn memmap --raw-inputs-config-file examples/memmap/genome_fasta_and_DNASE_fc_bigwigs.json --memmap-dir /mnt/data/memmap/TF_challenge_DNASE/ --processed-inputs-config-file examples/memmap/genome_and_DNASE_fc_memmaped.json
 ```
-#### --data-config-file
-The input data config file `examples/genome_fasta_and_DNASE_fc_bigwigs.json` has a dictionary where the keys are dataset names (in this case the name of the celltype) and the value are `genome_fasta` and `dnase_bigwig` data for that dataset.
+#### --raw-inputs-config-file
+The raw input data config file `examples/genome_fasta_and_DNASE_fc_bigwigs.json` has a dictionary where the keys are dataset names (in this case the name of the celltype) and the value are `genome_fasta` and `dnase_bigwig` data for that dataset.
 
 #### --memmap-dir
-`tfdragonn memmap` creates a data directory for each fasta and bigwig file in the memmap directory `/mnt/data/memmap/TF_challenge_DNASE/`. For example, raw data in `DNASE.A549.fc.signal.bigwig` is encoded in the data directory `/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig/`. In each genome and dnase data directory, there is a `.npy` file for each chromosome that holds the encoded data for that chromosome. For example `/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig/chr10.npy` is an array with shape `(135534747,)` that has the dnase signal value for each position in that chromosome. Similarly, `/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa/chr10.npy` is an	array with shape `(4, 135534747)` that has the one hot encoding of the chromosome's sequence. Using these arrays, we can obtain data for any genomic interval based on its chromsome, start and end coordinates.
+`tfdragonn memmap` creates a data directory for each fasta and bigwig file in the memmap directory `/mnt/data/memmap/TF_challenge_DNASE/`. For example, raw data in `DNASE.A549.fc.signal.bigwig` is encoded in the data directory `/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig/`. In each genome and dnase data directory, there is a `.npy` file for each chromosome that holds the encoded data for that chromosome. For example `/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig/chr10.npy` is an array with shape `(135534747,)` that has the dnase signal value for each position in that chromosome. Similarly, `/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa/chr10.npy` is an array with shape `(4, 135534747)` that has the one hot encoding of the chromosome's sequence. Using these arrays, we can obtain data for any genomic interval based on its chromsome, start and end coordinates.
 
-#### --output-file
-The output data config file `examples/genome_and_DNASE_fc_memmaped.json` provides paths to all the data directories. It also contains other attributes of datasets that have not been specified and an empty `task_names`, which we use in the next step to obtain fixed size genomic regions and their labels.
+#### --processed-inputs-config-file
+The processed inputs config file `examples/genome_and_DNASE_fc_memmaped.json` written by this command provides paths to all the data directories with encoded data. We use this file in subsequent steps to train, test, and predict.
 
 ## Processing raw peak files into fixed size genomic regions and labels
 Run the following command to get 1000bp genomic regions tiling DNase peaks with stride (spacing) of 200bp and binary labels for MYC binding:

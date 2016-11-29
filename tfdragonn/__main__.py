@@ -13,7 +13,10 @@ from genomedatalayer.extractors import (
     FastaExtractor, MemmappedBigwigExtractor, MemmappedFastaExtractor
 )
 
-from .datasets import parse_data_config_file, parse_raw_input_config_file, raw_input2processed_input
+from .datasets import (
+    parse_data_config_file, parse_raw_input_config_file,
+    raw_input2processed_input, parse_raw_intervals_config_file
+)
 from .intervals import get_tf_predictive_setup, train_test_chr_split, train_valid_test_chr_split
 
 # setup logging
@@ -37,6 +40,9 @@ def parse_args():
     data_config_parser = argparse.ArgumentParser(add_help=False)
     data_config_parser.add_argument('--data-config-file', type=str, required=True,
                                    help='file with dataset names, task names, and data files')
+    raw_intervals_config_parser = argparse.ArgumentParser(add_help=False)
+    raw_intervals_config_parser.add_argument('--raw-intervals-config-file', type=str, required=True,
+                                             help='includes task names and map from dataset ids to raw interval files')
     model_files_parser = argparse.ArgumentParser(add_help=False)
     model_files_parser.add_argument('--arch-file', type=str, required=True,
                                     help='model architecture json file')
@@ -44,7 +50,7 @@ def parse_args():
                                     help='weights hd5 file')
     multiprocessing_parser = argparse.ArgumentParser(add_help=False)
     multiprocessing_parser.add_argument('--n-jobs', type=int, default=1,
-                                        help='num of processes used for preprocessing and postprocessing')
+                                        help='num of processes')
     output_file_parser = argparse.ArgumentParser(add_help=False)
     output_file_parser.add_argument('--output-file', type=str, required=True,
                                     help='output file to write to')
@@ -65,9 +71,8 @@ def parse_args():
     memmap_parser.add_argument('--raw-inputs-config-file', type=str, required=True, help="Raw input configuration file.")
     memmap_parser.add_argument('--processed-inputs-config-file', type=str, required=True, help="Processed input configuration file to write.")
     label_regions_parser = subparsers.add_parser('label_regions',
-                                                 parents=[data_config_parser,
+                                                 parents=[raw_intervals_config_parser,
                                                           multiprocessing_parser,
-                                                          output_file_parser,
                                                           prefix_parser],
                                          help='Generates fixed length regions and their labels for each dataset.'
                                               'Writes a new data config file with regions and labels files.')
@@ -169,44 +174,38 @@ def main_memmap(raw_inputs_config_file=None,
     logger.info("Done!")
 
 
-def main_label_regions(data_config_file=None,
+def main_label_regions(raw_intervals_config_file=None,
                        bin_size=None,
                        flank_size=None,
                        stride=None,
                        n_jobs=None,
-                       prefix=None,
-                       output_file=None):
+                       prefix=None):
     """
     Generates regions and labels files for each dataset.
     Writes new data config file with the generated files.
     """
-    data = parse_data_config_file(data_config_file)
-    data_dict = data.to_dict()
-    logger.info("Generating regions and labels for datasets in {}...".format(data_config_file))
-    for dataset_id, dataset in data:
+    raw_intervals_config = parse_raw_intervals_config_file(raw_intervals_config_file)
+    processed_intervals_dict = {"task_names": raw_intervals_config.task_names}
+    logger.info("Generating regions and labels for datasets in {}...".format(raw_intervals_config_file))
+    for dataset_id, raw_intervals in raw_intervals_config:
         logger.info("Generating regions and labels for dataset {}...".format(dataset_id))
         dataset_prefix = "{}.{}".format(prefix, dataset_id)
+        path_to_dataset_regions = os.path.abspath("{}.intervals.bed".format(dataset_prefix))
+        path_to_dataset_labels = os.path.abspath("{}.labels.npy".format(dataset_prefix))
         if os.path.isfile("{}.intervals.bed".format(dataset_prefix)) and os.path.isfile("{}.labels.npy".format(dataset_prefix)):
-            logger.info("Regions file {0}.intervals.bed and labels file {0}.labels.npy already exists. skipping dataset {1}!".format(dataset_prefix, dataset_id))
+            logger.info("Regions file {} and labels file {} already exist. skipping dataset {1}!".format(path_to_dataset_regions, path_to_dataset_labels, dataset_id))
         else:
-            regions, labels = get_tf_predictive_setup(dataset.feature_beds, region_bedtool=dataset.region_bed,
-                                                      ambiguous_feature_bedtools=dataset.ambiguous_feature_beds,
+            regions, labels = get_tf_predictive_setup(raw_intervals.feature_beds, region_bedtool=raw_intervals.region_bed,
+                                                      ambiguous_feature_bedtools=raw_intervals.ambiguous_feature_beds,
                                                       bin_size=bin_size, flank_size=flank_size, stride=stride,
                                                       filter_flank_overlaps=False, genome='hg19', n_jobs=n_jobs,
                                                       save_to_prefix=dataset_prefix)
-            logger.info("Saved regions to {0}.intervals.bed and labels to {0}.labels.npy".format(dataset_prefix))
-        # update the data dictionary
-        labeled_regions_dataset_dict = dataset.to_dict()
-        del labeled_regions_dataset_dict["feature_beds"]
-        del labeled_regions_dataset_dict["ambiguous_feature_beds"]
-        del labeled_regions_dataset_dict["region_bed"]
-        labeled_regions_dataset_dict["regions"] = os.path.abspath("{}.intervals.bed".format(dataset_prefix))
-        labeled_regions_dataset_dict["labels"] = os.path.abspath("{}.labels.npy".format(dataset_prefix))
-        data_dict[dataset_id] = labeled_regions_dataset_dict
-        logger.info("Replaced bed files with regions and labels files for dataset {}.".format(dataset_id))
-    # write json with regions and labels files
-    json.dump(data_dict, open(output_file, "w"), indent=4)
-    logger.info("Wrote new data config file to {}.".format(output_file))
+            logger.info("Saved regions to {} and labels to {}".format(path_to_dataset_regions, path_to_dataset_labels))
+        processed_intervals_dict[dataset_id] = {"regions": path_to_dataset_regions, "labels": path_to_dataset_labels}
+    # write processed intervals config file
+    processed_intervals_config_file = os.path.abspath("{}.json".format(prefix))
+    json.dump(processed_intervals_dict, open(processed_intervals_config_file, "w"), indent=4)
+    logger.info("Wrote new data config file to {}.".format(processed_intervals_config_file))
     logger.info("Done!")
 
 

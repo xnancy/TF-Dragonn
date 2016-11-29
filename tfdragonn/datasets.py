@@ -414,3 +414,94 @@ def parse_processed_input_config_file(processed_input_config_fname):
         dataset_id2raw_inputs[dataset_id] = ProcessedInputs(**processed_inputs)
 
     return ProcessedInputsConfig(dataset_id2raw_inputs)
+
+
+class RawIntervals(object):
+
+    @property
+    def has_feature_beds(self):
+        return self.feature_beds is not None
+
+    @property
+    def has_region_bed(self):
+        self.region_bed is not None
+
+    def __init__(self, feature_beds=None,
+                 ambiguous_feature_beds=None, region_bed=None):
+        self.feature_beds = feature_beds
+        self.ambiguous_feature_beds = ambiguous_feature_beds
+        self.region_bed = region_bed
+
+
+class ProcessedIntervals(object):
+
+    @property
+    def has_labels(self):
+        return self.labels is not None
+
+    def __init__(self, regions=None, labels=None):
+        self.regions = regions
+        self.labels= labels
+
+
+class RawIntervalsConfig(object):
+    def __iter__(self):
+        return zip(self.dataset_ids, self.raw_intervals_list)
+
+    def __init__(self, dataset_id2raw_intervals, task_names):
+        assert isinstance(task_names, list), "task_names must be a list!"
+
+        self.dataset_ids = dataset_id2raw_intervals.keys()
+        self.raw_intervals_list = dataset_id2raw_intervals.values()
+        self.task_names = task_names
+
+        # check that task names in raw intervals are present in task_names
+        task_names = set(task_names)
+        assert len(task_names) == len(self.task_names), "task names must be unique!"
+        for dataset_id, raw_intervals in self:
+            assert type(raw_intervals.feature_beds) is collections.OrderedDict, "feature beds in dataset {} are not a dictionary:\n{}".format(dataset_id, raw_intervals.feature_beds)
+            dataset_task_names = set(raw_intervals.feature_beds.keys())
+            assert dataset_task_names.issubset(task_names), "Tasks {} in {} are not in task_names!".format(dataset_task_names - task_names, dataset_id)
+            if raw_intervals.ambiguous_feature_beds is not None:
+                assert type(raw_intervals.ambiguous_feature_beds) is collections.OrderedDict, "ambiguous feature beds in dataset {} are not a dictionary:\n{}".format(dataset_id, raw_intervals.ambiguous_feature_beds)
+                dataset_ambiguous_task_names = set(raw_intervals.ambiguous_feature_beds.keys())
+                assert dataset_ambiguous_task_names.issubset(task_names), "Tasks {} in {} are not in task_names!".format(dataset_ambiguous_task_names - task_names, dataset_id)
+                assert dataset_ambiguous_task_names.issubset(dataset_task_names), "Tasks {} in ambiguous features beds in {} are not in feature beds!".format(
+                    dataset_ambiguous_task_names - dataset_task_names, dataset_id)
+
+        # converts dictionaries of feature and ambiguous beds to uniformly ordered lists of files
+        for i, (dataset_id, raw_intervals) in enumerate(self):
+            feature_beds_list = []
+            for task_name in self.task_names:
+                feature_beds_list.append(raw_intervals.feature_beds[task_name] if task_name in raw_intervals.feature_beds.keys() else None)
+            self.raw_intervals_list[i].feature_beds = feature_beds_list
+            if raw_intervals.ambiguous_feature_beds is not None:
+                ambiguous_feature_beds_list = []
+                for task_name in self.task_names:
+                    ambiguous_feature_beds_list.append(raw_intervals.ambiguous_feature_beds[task_name] if task_name in raw_intervals.ambiguous_feature_beds.keys() else None)
+                self.raw_intervals_list[i].ambiguous_feature_beds = ambiguous_feature_beds_list
+            else:
+                self.raw_intervals_list[i].ambiguous_feature_beds = None
+
+    def to_dict(self):
+        datasets_dict = collections.OrderedDict()
+        datasets_dict["task_names"] = self.task_names
+        for dataset_id, raw_intervals in self:
+            datasets_dict[dataset_id] = raw_intervals.__dict__
+
+        return datasets_dict
+
+
+def parse_raw_intervals_config_file(raw_intervals_config_file):
+    """
+    Returns instance of RawIntervalsConfig
+    """
+    dataset_id2raw_intervals = json.load(open(raw_intervals_config_file), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, raw_intervals in dataset_id2raw_intervals.items():
+        if dataset_id == "task_names":
+            task_names = raw_intervals
+            del dataset_id2raw_intervals["task_names"]
+            continue
+        dataset_id2raw_intervals[dataset_id] = RawIntervals(**raw_intervals)
+
+    return RawIntervalsConfig(dataset_id2raw_intervals, task_names)

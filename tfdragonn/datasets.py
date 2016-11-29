@@ -312,7 +312,7 @@ def check_property_consistency(config, target_property):
     return True
 
 
-class InputsConfig(object):
+class Config(object):
      __metaclass__ = ABCMeta
 
      @abstractmethod
@@ -334,7 +334,7 @@ class InputsConfig(object):
              return True
 
 
-class RawInputsConfig(InputsConfig):
+class RawInputsConfig(Config):
     """
     A class for the raw inputs config file.
 
@@ -364,7 +364,7 @@ class RawInputsConfig(InputsConfig):
         return zip(self.dataset_ids, self.raw_inputs_list)
 
 
-class ProcessedInputsConfig(InputsConfig):
+class ProcessedInputsConfig(Config):
     """
     A class for the processed inputs config file.
 
@@ -373,6 +373,14 @@ class ProcessedInputsConfig(InputsConfig):
     dataset_id2processed_inputs : dict
         keys are data set id strigs, values are instances of ProcessedInputs.
     """
+    @property
+    def has_genome_data_dir(self):
+        return self.processed_inputs_list[0].has_genome_data_dir
+
+    @property
+    def has_dnase_data_dir(self):
+        return self.processed_inputs_list[0].has_dnase_data_dir
+
     def __init__(self, dataset_id2processed_inputs):
         self.dataset_ids = dataset_id2processed_inputs.keys()
         self.processed_inputs_list = dataset_id2processed_inputs.values()
@@ -391,10 +399,10 @@ class ProcessedInputsConfig(InputsConfig):
             raise ValueError("Datasets {} and {} have inconsistent dnase data dir types!".format(dataset_id1, dataset_id2))
 
     def __iter__(self):
-        return zip(self.dataset_ids, self.raw_inputs_list)
+        return zip(self.dataset_ids, self.processed_inputs_list)
 
 
-def parse_raw_input_config_file(raw_input_config_fname):
+def parse_raw_inputs_config_file(raw_input_config_fname):
     """
     Returns instance of RawInputsConfig
     """
@@ -405,7 +413,7 @@ def parse_raw_input_config_file(raw_input_config_fname):
     return RawInputsConfig(dataset_id2raw_inputs)
 
 
-def parse_processed_input_config_file(processed_input_config_fname):
+def parse_processeds_input_config_file(processed_input_config_fname):
     """
     Returns instance of RawInputsConfig
     """
@@ -431,17 +439,6 @@ class RawIntervals(object):
         self.feature_beds = feature_beds
         self.ambiguous_feature_beds = ambiguous_feature_beds
         self.region_bed = region_bed
-
-
-class ProcessedIntervals(object):
-
-    @property
-    def has_labels(self):
-        return self.labels is not None
-
-    def __init__(self, regions=None, labels=None):
-        self.regions = regions
-        self.labels= labels
 
 
 class RawIntervalsConfig(object):
@@ -505,3 +502,53 @@ def parse_raw_intervals_config_file(raw_intervals_config_file):
         dataset_id2raw_intervals[dataset_id] = RawIntervals(**raw_intervals)
 
     return RawIntervalsConfig(dataset_id2raw_intervals, task_names)
+
+
+class ProcessedIntervals(object):
+
+    @property
+    def has_labels(self):
+        return self.labels is not None
+
+    def __init__(self, regions, labels=None):
+        self.regions = regions
+        self.labels= labels
+
+
+class ProcessedIntervalsConfig(Config):
+
+    @property
+    def has_labels(self):
+        return self.processed_intervals_list[0].has_labels
+
+    def __iter__(self):
+        return zip(self.dataset_ids, self.processed_intervals_list)
+
+    def __init__(self, dataset_id2processed_intervals, task_names):
+        assert isinstance(task_names, list), "task_names must be a list!"
+
+        self.dataset_ids = dataset_id2processed_intervals.keys()
+        self.processed_intervals_list = dataset_id2processed_intervals.values()
+        self.task_names = task_names
+        # check for consistent presence of labels
+        rv = self.check_property_consistency( "has_labels")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent presence of labels!".format(dataset_id1, dataset_id2))
+
+
+def parse_processed_intervals_config_file(processed_intervals_config_file):
+    """
+    Returns instance of ProcessedIntervalsConfig
+    """
+    dataset_id2processed_intervals = json.load(open(processed_intervals_config_file), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, processed_intervals in dataset_id2processed_intervals.items():
+        if dataset_id == "task_names":
+            task_names = processed_intervals
+            del dataset_id2processed_intervals["task_names"]
+            continue
+        dataset_id2processed_intervals[dataset_id] = ProcessedIntervals(**processed_intervals)
+
+    return ProcessedIntervalsConfig(dataset_id2processed_intervals, task_names)

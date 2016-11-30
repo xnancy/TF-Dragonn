@@ -11,13 +11,13 @@ A queue for storing intervals and labels.
 _DEFAULT_BUFFER_CAPACITY = 10000
 
 
-def interval_queue(intervals, labels, dequeue_size=128, name='interval-queue'):
+def interval_queue(intervals, labels=None, dequeue_size=128, name='interval-queue'):
     """Create an interval queue.
 
     Args:
         intervals: a dict of numpy arrays, with the schema:
             'chrom': (string), 'start': (int), 'end' (int)
-        labels: a dict of numpy arrays of size N, where N == len(intervals['chrom'])
+        labels: (optional) a dict of numpy arrays of size N, where N == len(intervals['chrom'])
         name: (optional) string, name for this queue
     Returns:
         a dictionary of tensors with keys [chrom, start, end, labels], where each
@@ -40,17 +40,19 @@ def interval_queue(intervals, labels, dequeue_size=128, name='interval-queue'):
         end_queue = tf.train.input_producer(
             k['end'], shuffle=False, capacity=_DEFAULT_BUFFER_CAPACITY, name='end-buffer')
 
-        labels_dequeues = {}
-        for label_name, label in labels.items():
-            label_queue = tf.input_producer(
-                label, shuffle=False, capacity=_DEFAULT_BUFFER_CAPACITY, name=label_name)
-            labels_dequeues[label_name] = label_queue.dequeue_many(dequeue_size)
-
         outputs = {
             'chrom': chrom_queue.dequeue_many(dequeue_size),
             'start': start_queue.dequeue_many(dequeue_size),
-            'end': stop_queue.dequeue_many(dequeue_size),
-            'labels': labels_dequeues,
+            'end': end_queue.dequeue_many(dequeue_size),
         }
+
+        if labels:
+            labels_dequeues = {}
+            for label_name, label in labels.items():
+                label_queue = tf.input_producer(
+                    label, shuffle=False, capacity=_DEFAULT_BUFFER_CAPACITY, name=label_name)
+                labels_dequeues[label_name] = label_queue.dequeue_many(
+                    dequeue_size)
+            outputs['labels'] = labels_dequeues
 
         return outputs

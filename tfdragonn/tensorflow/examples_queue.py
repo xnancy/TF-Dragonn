@@ -7,13 +7,13 @@ from collections import OrderedDict
 import tensorflow as tf
 
 """
-A queue for storing intervals and labels.
+A queue for storing intervals and optionally labels.
 """
 
 _DEFAULT_BUFFER_CAPACITY = 10000
 
 
-def examples_queue(intervals, data, labels, name='examples-queue'):
+def examples_queue(intervals, data, labels=None, name='examples-queue'):
     """Create an examples queue to store extracted examples.
 
     Args:
@@ -21,7 +21,7 @@ def examples_queue(intervals, data, labels, name='examples-queue'):
             1) intervals encoded as 'chrom': (string), 'start': (int), and 'stop': (int), or
             2) intervals encoded as 'bed3': (string) TSV entries
         data: a dict of tensors with first dimension N.
-        labels: a dict of tensors, each with first dimension N.
+        labels: (optional) a dict of tensors, each with first dimension N.
         name: (optional) string, name for this queue
     Returns:
         a queue reference
@@ -29,16 +29,14 @@ def examples_queue(intervals, data, labels, name='examples-queue'):
     tensors_to_enqueue = OrderedDict
 
     for k, v in intervals.items():
-        assert k not in tensors_to_enqueue
         tensors_to_enqueue['intervals/{}'.format(k)] = v
 
     for k, v in data.items():
-        assert k not in tensors_to_enqueue
         tensors_to_enqueue['data/{}'.format(k)] = v
 
-    for k, v in labels.items():
-        assert k not in tensors_to_enqueue
-        tensors_to_enqueue['labels/'.format(k)] = v
+    if labels:
+        for k, v in labels.items():
+            tensors_to_enqueue['labels/'.format(k)] = v
 
     shapes = [t.get_shape()[1:] for t in tensors_to_enqueue.values()]
     dtypes = [t.dtype for t in tensors_to_enqueue.values()]

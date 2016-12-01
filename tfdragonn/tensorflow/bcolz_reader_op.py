@@ -47,11 +47,11 @@ def bcolz_interval_reader(intervals, data_directory, interval_size=1000, norm_pa
         data_shape = list(data[list(data.keys())[0]].shape)
 
         bcolz_reader_fn = _get_bcolz_reader_fn(
-            data, in_memory)
+            data, in_memory, interval_size)
         read_values = _get_pyfunc_from_reader_fn(
             bcolz_reader_fn, bed3_entries_tensors, op_name)
 
-        output_shape = [read_batch_size, interval_size] + data_shape[1:]
+        output_shape = [read_batch_size] + data_shape[:-1] + [interval_size]
         read_values = tf.reshape(read_values, output_shape)
 
         if norm_params:  # TODO(cprobert): implement normalization parameters
@@ -70,7 +70,7 @@ def _get_pyfunc_from_reader_fn(reader_fn, bed3_entries_tensors, op_name):
                       name=op_name)
 
 
-def _get_bcolz_reader_fn(data, in_memory):
+def _get_bcolz_reader_fn(data, in_memory, interval_size):
     """Generate a function to read from a bcolz-compressed data directory.
 
     Params:
@@ -80,12 +80,19 @@ def _get_bcolz_reader_fn(data, in_memory):
     Returns:
         function that takes np.array of BED-3 strings to read
     """
-    def accessor_func(chrom, start, end):
-        return data[chrom][..., start:end]
+    def accessor_func_1d(chrom, start, end):
+        return data[chrom][start:end]
+
+    def accessor_func_2d(chrom, start, end):
+        return data[chrom][:, start:end]
 
     # the first dim will vary by chrom
     data_shape = list(data[list(data.keys())[0]].shape)
-    print('>>>DATA SHAPE {}'.format(data_shape))
+
+    if len(data_shape) == 1:
+        accessor_func = accessor_func_1d
+    else:
+        accessor_func = accessor_func_2d
 
     def extractor_func(*bed3_entries):
         if bed3_entries[0].ndim != 1:
@@ -111,18 +118,11 @@ def _get_bcolz_reader_fn(data, in_memory):
             starts = bed3_entries[1]
             ends = bed3_entries[2]
 
-        lens = np.array(ends) - np.array(starts)
-        target_len = lens[0]
-        if not np.all(lens == lens[0]):
-            raise IOError('Inconsistent bed entry lengths: {}'.format(lens))
-
-        output_shape = [n_entries] + data_shape[1:] + [target_len]
-        print('>>>OUTPUT SHAPE {}'.format(output_shape))
+        output_shape = [n_entries] + data_shape[:-1] + [interval_size]
         output = np.empty(shape=output_shape, dtype=np.float32)
         for i, (chrom, start, end) in enumerate(zip(chrs, starts, ends)):
             fetched = accessor_func(chrom, start, end)
-            print('>>>FETCHED SHAPE {}'.format(fetched.shape))
-            output[..., i] = fetched
+            output[i] = fetched
 
         return output
 

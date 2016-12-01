@@ -1,5 +1,5 @@
 {
-    "A459": {
+    "A549": {
         "dnase_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/DNASE.A549.fc.signal.bigwig", 
         "genome_data_dir": "/mnt/data/memmap/TF_challenge_DNASE/hg19.genome.fa"
     }, 

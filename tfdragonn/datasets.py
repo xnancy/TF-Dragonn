@@ -333,6 +333,15 @@ class Config(object):
                  return (dataset_id1, dataset_id2)
              return True
 
+     def to_dict(self):
+         datasets_dict = collections.OrderedDict()
+         if hasattr(self, "task_names"):
+             datasets_dict["task_names"] = self.task_names
+         for dataset_id, dataset_data in self:
+             datasets_dict[dataset_id] = dataset_data.__dict__
+
+         return datasets_dict
+
 
 class RawInputsConfig(Config):
     """
@@ -413,15 +422,15 @@ def parse_raw_inputs_config_file(raw_input_config_fname):
     return RawInputsConfig(dataset_id2raw_inputs)
 
 
-def parse_processeds_input_config_file(processed_input_config_fname):
+def parse_processed_inputs_config_file(processed_input_config_fname):
     """
     Returns instance of RawInputsConfig
     """
     dataset_id2processed_inputs = json.load(open(processed_input_config_fname), object_pairs_hook=collections.OrderedDict)
     for dataset_id, processed_inputs in dataset_id2processed_inputs.items():
-        dataset_id2raw_inputs[dataset_id] = ProcessedInputs(**processed_inputs)
+        dataset_id2processed_inputs[dataset_id] = ProcessedInputs(**processed_inputs)
 
-    return ProcessedInputsConfig(dataset_id2raw_inputs)
+    return ProcessedInputsConfig(dataset_id2processed_inputs)
 
 
 class RawIntervals(object):
@@ -441,7 +450,7 @@ class RawIntervals(object):
         self.region_bed = region_bed
 
 
-class RawIntervalsConfig(object):
+class RawIntervalsConfig(Config):
     def __iter__(self):
         return zip(self.dataset_ids, self.raw_intervals_list)
 
@@ -479,14 +488,6 @@ class RawIntervalsConfig(object):
                 self.raw_intervals_list[i].ambiguous_feature_beds = ambiguous_feature_beds_list
             else:
                 self.raw_intervals_list[i].ambiguous_feature_beds = None
-
-    def to_dict(self):
-        datasets_dict = collections.OrderedDict()
-        datasets_dict["task_names"] = self.task_names
-        for dataset_id, raw_intervals in self:
-            datasets_dict[dataset_id] = raw_intervals.__dict__
-
-        return datasets_dict
 
 
 def parse_raw_intervals_config_file(raw_intervals_config_file):
@@ -537,7 +538,6 @@ class ProcessedIntervalsConfig(Config):
         else:
             dataset_id1, dataset_id2 = rv
             raise ValueError("Datasets {} and {} have inconsistent presence of labels!".format(dataset_id1, dataset_id2))
-
 
 def parse_processed_intervals_config_file(processed_intervals_config_file):
     """

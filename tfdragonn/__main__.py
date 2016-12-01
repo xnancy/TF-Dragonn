@@ -14,8 +14,10 @@ from genomedatalayer.extractors import (
 )
 
 from .datasets import (
-    parse_data_config_file, parse_raw_input_config_file,
-    raw_input2processed_input, parse_raw_intervals_config_file
+    parse_data_config_file, parse_raw_inputs_config_file,
+    parse_processed_inputs_config_file,
+    raw_input2processed_input, parse_raw_intervals_config_file,
+    parse_processed_intervals_config_file
 )
 from .intervals import get_tf_predictive_setup, train_test_chr_split, train_valid_test_chr_split
 
@@ -32,6 +34,8 @@ logger.propagate = False
 
 input2memmap_extractor = {'dnase_bigwig': MemmappedBigwigExtractor,
                           'genome_fasta': MemmappedFastaExtractor}
+processed_input2extractor = {'dnase_data_dir': MemmappedBigwigExtractor,
+                             'genome_data_dir': MemmappedFastaExtractor}
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -43,6 +47,9 @@ def parse_args():
     raw_intervals_config_parser = argparse.ArgumentParser(add_help=False)
     raw_intervals_config_parser.add_argument('--raw-intervals-config-file', type=str, required=True,
                                              help='includes task names and map from dataset ids to raw interval files')
+    processed_intervals_config_parser = argparse.ArgumentParser(add_help=False)
+    processed_intervals_config_parser.add_argument('--processed-intervals-config-file', type=str, required=True,
+                                                   help='includes task names and map from dataset ids to raw interval files')
     model_files_parser = argparse.ArgumentParser(add_help=False)
     model_files_parser.add_argument('--arch-file', type=str, required=True,
                                     help='model architecture json file')
@@ -83,10 +90,11 @@ def parse_args():
     label_regions_parser.add_argument('--stride', type=int, default=200,
                                        help='spacing between consecutive bins')
     train_parser = subparsers.add_parser('train',
-                                         parents=[data_config_parser,
-                                                  multiprocessing_parser,
+                                         parents=[processed_intervals_config_parser,
                                                   prefix_parser],
                                          help='model training help')
+    train_parser.add_argument('--processed-inputs-config-file', type=str, required=True, help="Processed input configuration file.")
+    train_parser.add_argument('--model-type', type=str, required=True, help="Name of model class. Common model types: SequenceAndDnaseClassifier, SequenceClassifier")
     train_parser.add_argument('--arch-file', type=str, required=False,
                                     help='model architecture json file')
     train_parser.add_argument('--weights-file', type=str, required=False,
@@ -150,7 +158,7 @@ def main_memmap(raw_inputs_config_file=None,
     Returns new data config file with memmaped inputs.
     """
     import ntpath
-    raw_inputs_config = parse_raw_input_config_file(raw_inputs_config_file)
+    raw_inputs_config = parse_raw_inputs_config_file(raw_inputs_config_file)
     dataset_id2processed_inputs = collections.OrderedDict()
     logger.info("Processing input data in {}...".format(raw_inputs_config_file))
     for dataset_id, raw_inputs in raw_inputs_config:
@@ -209,111 +217,73 @@ def main_label_regions(raw_intervals_config_file=None,
     logger.info("Done!")
 
 
-def main_train(data_config_file=None,
+def main_train(processed_intervals_config_file=None,
+               processed_inputs_config_file=None,
+               model_type=None,
                prefix=None,
-               n_jobs=None,
                training_config_file=None,
                arch_file=None,
                weights_file=None):
-    # get matched region beds and feature/tf beds
-    logger.info("parsing data config file..")
-    datasets = parse_data_config_file(data_config_file)
-    # get lists of regions and labels
-    if datasets.include_regions and datasets.include_labels:
-        dataset2regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
-                                      for dataset_id, dataset in datasets}
-    else: ## TODO: call main_label_regions, continue with output data config file
-        raise RuntimeError("data config file doesnt include regions and labels for each dataset. Run the label_regions command first!")
-    # split regions and labels into train, valid and test, shuffle the training data
-    # test data not used at all during training or early stopping
-    logger.info("Splitting regions and labels into train and validation subsets and shuffling train subset...")
-    dataset2train_regions_and_labels = collections.OrderedDict()
-    dataset2test_regions_and_labels = collections.OrderedDict()
-    total_training_examples = [0] # total examples in each dataset
-    for dataset_id, (regions, labels) in dataset2regions_and_labels.items():
-        ( regions_train, regions_valid, regions_test,
-          y_train, y_valid, y_test ) = train_valid_test_chr_split(regions, labels, ["chr9"], ["chr1", "chr21", "chr8"])
-        regions_train, y_train = shuffle(regions_train, y_train, random_state=0)
-        dataset2train_regions_and_labels[dataset_id] = (regions_train, y_train)
-        dataset2test_regions_and_labels[dataset_id] = (regions_valid, y_valid)
-        total_training_examples.append(len(y_train))
-    # set up the architecture
-    interval_length = dataset2train_regions_and_labels.values()[0][0][0].length
-    num_tasks = dataset2train_regions_and_labels.values()[0][1].shape[1]
-    y_train = np.zeros((sum(total_training_examples), num_tasks))
-    cumsum_total_training_examples = np.cumsum(total_training_examples)
-    for i, (start_indx, end_indx) in enumerate(zip(cumsum_total_training_examples, cumsum_total_training_examples[1:])):
-        y_train[start_indx:end_indx] = dataset2train_regions_and_labels.values()[i][1]
+    # architecture args, need to provide json specification option
     seq_architecture_parameters = {'num_filters': (55, 75, 95),
                                    'conv_width': (20, 20, 20),
                                    'dropout': 0.1}
-    seq_and_dnase_architecture_parameters = {}
-    if datasets.memmaped:
-        sequence_input = False
-        dnase_input = False
-        dataset2extractors = {dataset_id: [] for dataset_id, _ in datasets}
-        if datasets.memmaped_fasta:
-            sequence_input = True
-            # write non redundant mapping from data_dir to extractor
-            genome_data_dir2fasta_extractor = {}
-            for dataset_id, dataset in datasets:
-                if dataset.genome_data_dir not in genome_data_dir2fasta_extractor:
-                    genome_data_dir2fasta_extractor[dataset.genome_data_dir] = MemmappedFastaExtractor(dataset.genome_data_dir)
-                dataset2extractors[dataset_id].append(genome_data_dir2fasta_extractor[dataset.genome_data_dir])
-            logger.info("Found memmapped fastas, initialized memmaped fasta extractors")
-        if datasets.memmaped_dnase:
-            dnase_input = True
-            # write non redundant mapping from data_dir to extractor
-            dnase_data_dir2bigwig_extractor = {}
-            for dataset_id, dataset in datasets:
-                if dataset.dnase_data_dir not in dnase_data_dir2bigwig_extractor:
-                    dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir] = MemmappedBigwigExtractor(
-                        dataset.dnase_data_dir, local_norm_halfwidth=interval_length/2)
-                dataset2extractors[dataset_id].append(dnase_data_dir2bigwig_extractor[dataset.dnase_data_dir])
-            logger.info("Found memmapped dnase bigwigs, initialized memmaped bigwig extractors")
-        # get appropriate model class
-        if sequence_input and dnase_input:
-            model_class = StreamingSequenceAndDnaseClassifier
-            architecture_parameters = seq_and_dnase_architecture_parameters
-        elif sequence_input and not dnase_input:
-            model_class = StreamingSequenceClassifier
-            architecture_parameters = seq_architecture_parameters
-        else:
-            raise RuntimeError("Unsupported combination of inputs. Available models support either sequence-only or sequence+dnase!")
-        # Initialize, compile, and train
-        logger.info("Initializing a {}".format(model_class))
-        if arch_file is not None and weights_file is not None:
-            model = model_class(arch_fname=arch_file, weights_fname=weights_file)
-        else:
-            model = model_class(interval_length, num_tasks, **architecture_parameters)
-        if training_config_file is not None:
-            logger.info("Compiling {} with training configs in {}..".format(model_class, training_config_file))
-            training_args = json.load(open(training_config_file))
-            model.compile(**training_args)
-        else:
-            logger.info("Compiling {}..".format(model_class))
-            model.compile() #y=y_train) ## TODO: proper task scaling at batch level instead
-        logger.info("Starting to train with streaming data..")
-        #model.train(intervals_train, y_train, intervals_valid, y_valid, fasta_extractor,
-        #            save_best_model_to_prefix=prefix)
-        model.train_on_multiple_datasets(
-            dataset2train_regions_and_labels, dataset2test_regions_and_labels, dataset2extractors,
-            task_names=datasets.task_names, save_best_model_to_prefix=prefix)
-    else: # extract encoded data in memory
-        logger.info("extracting data in memory")
-        fasta_extractor = FastaExtractor(data.genome_fasta)
-        logger.info("extracting test data")
-        X_test = fasta_extractor(intervals_test)
-        logger.info("extracting training data")
-        X_train = fasta_extractor(intervals_train)
-        # initialize model and train
-        ## TODO: load pretrained model and/or architecture
-        logger.info("Initializing a SequenceClassifer..")
-        model = SequenceClassifier(interval_length, num_tasks, **architecture_parameters)
-        logger.info("Compiling SequenceClassifer..")
-        model.compile(y=y_train)
-        logger.info("Starting to train")
-        model.train(X_train, y_train, (X_test, y_test), patience=6)
+    logger.info("parsing inputs and intervals config files..")
+    processed_intervals_config = parse_processed_intervals_config_file(processed_intervals_config_file)
+    processed_inputs_config = parse_processed_inputs_config_file(processed_inputs_config_file)
+    # check that inputs config has dataset ids in intervals config
+    for dataset_id, _ in processed_intervals_config:
+        if dataset_id not in processed_inputs_config.dataset_ids:
+            raise ValueError("dataset {} in processed intervals config is not present in the processed inputs config!".format(dataset_id))
+    if not processed_intervals_config.has_labels:
+        raise RuntimeError("Processed intervals config file doesn't include labels for training!")
+    dataset_id2regions_and_labels = {dataset_id: (BedTool(dataset.regions), np.load(dataset.labels))
+                                  for dataset_id, dataset in processed_intervals_config}
+    logger.info("Splitting regions and labels into train and validation subsets and shuffling train subset...")
+    dataset_id2train_regions_and_labels = collections.OrderedDict()
+    dataset_id2test_regions_and_labels = collections.OrderedDict()
+    for dataset_id, (regions, labels) in dataset_id2regions_and_labels.items():
+        ( regions_train, regions_valid, regions_test,
+          y_train, y_valid, y_test ) = train_valid_test_chr_split(regions, labels, ["chr9"], ["chr1", "chr21", "chr8"])
+        regions_train, y_train = shuffle(regions_train, y_train, random_state=0)
+        dataset_id2train_regions_and_labels[dataset_id] = (regions_train, y_train)
+        dataset_id2test_regions_and_labels[dataset_id] = (regions_valid, y_valid)
+    # set up the architecture
+    interval_length = dataset_id2train_regions_and_labels.values()[0][0][0].length
+    num_tasks = dataset_id2train_regions_and_labels.values()[0][1].shape[1]
+    # initialize model
+    model_class = getattr(models, model_type)
+    if arch_file is not None and weights_file is not None:
+        model = model_class(arch_fname=arch_file, weights_fname=weights_file)
+    else:
+        model = model_class(interval_length, num_tasks) ## TODO: support user-provided constructor json
+    # check if inputs config has the inputs necessary for the model
+    for input_mode in model.input_modes:
+        if not getattr(processed_inputs_config, "has_{}".format(input_mode)):
+            raise ValueError("{} expects {} but it's not present in {}".format(model_type, input_mode, processed_inputs_config_file))
+    # initialize extractors for all inputs
+    dataset_id2extractors = {dataset_id: [] for dataset_id, _ in processed_intervals_config}
+    for input_mode in model.input_modes:
+        input_mode2extractor = {}
+        for dataset_id in processed_intervals_config.dataset_ids:
+            processed_inputs = processed_inputs_config.to_dict()[dataset_id]
+            dataset_input_mode = processed_inputs[input_mode]
+            if dataset_input_mode not in input_mode2extractor:
+                extractor_type = processed_input2extractor[input_mode]
+                input_mode2extractor[dataset_input_mode] = extractor_type(dataset_input_mode)
+            dataset_id2extractors[dataset_id].append(input_mode2extractor[dataset_input_mode])
+        logger.info("Initialized extractors for {}".format(input_mode))
+    if training_config_file is not None:
+        logger.info("Compiling {} with training configs in {}..".format(model_class, training_config_file))
+        training_args = json.load(open(training_config_file))
+        model.compile(**training_args)
+    else:
+        logger.info("Compiling {}..".format(model_class))
+        model.compile()
+    logger.info("Starting to train with streaming data..")
+    model.train_on_multiple_datasets(
+        dataset_id2train_regions_and_labels, dataset_id2test_regions_and_labels, dataset_id2extractors,
+        task_names=processed_intervals_config.task_names, save_best_model_to_prefix=prefix)
     model.save(prefix)
     logger.info("Saved trained model files to {}.arch.json and {}.weights.h5".format(prefix, prefix))
     logger.info("Done!")
@@ -605,5 +575,7 @@ def main():
     if command in ['train', 'predict', 'interpret', 'test']: # perform theano/keras import
         global SequenceClassifier, StreamingSequenceClassifier, StreamingSequenceAndDnaseClassifier
         from .models import SequenceClassifier, StreamingSequenceClassifier, StreamingSequenceAndDnaseClassifier
+        global models
+        from tfdragonn import models
     # run command
     command_functions[command](**args)

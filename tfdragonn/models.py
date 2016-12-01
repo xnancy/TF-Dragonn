@@ -72,7 +72,7 @@ class PrintMetrics(Callback):
             print('\n{}\n'.format(self.sequence_DNN.test(self.X_valid, self.y_valid)))
 
 
-class SequenceClassifier(object):
+class InmemSequenceClassifier(object):
     def __init__(self, seq_length=None, num_tasks=None, arch_fname=None, weights_fname=None,
                  num_filters=(15, 15, 15), conv_width=(15, 15, 15),
                  pool_width=35, L1=0, dropout=0.0,
@@ -185,7 +185,10 @@ class SequenceClassifier(object):
         return self.model.predict(X, batch_size=batch_size, verbose=False)
 
     
-class StreamingSequenceClassifier(SequenceClassifier):
+class SequenceClassifier(InmemSequenceClassifier):
+    def __init__(self, *args, **kwargs):
+        super(SequenceClassifier, self).__init__(*args, **kwargs)
+        self.input_models = ["genome_data_dir"]
 
     def train_on_multiple_datasets(self, dataset2train_regions_and_labels, dataset2valid_regions_and_labels, dataset2fasta_extractor,
                                    task_names=None, save_best_model_to_prefix=None,
@@ -370,7 +373,7 @@ class StreamingSequenceClassifier(SequenceClassifier):
         return np.concatenate(tuple(dl_scores), axis=1)
 
 
-class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
+class SequenceAndDnaseClassifier(SequenceClassifier):
 
     def __init__(self, seq_length=None, num_tasks=None, arch_fname=None, weights_fname=None,
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
@@ -380,6 +383,7 @@ class StreamingSequenceAndDnaseClassifier(StreamingSequenceClassifier):
         self.saved_params = locals()
         self.verbose = verbose
         self.num_epochs = num_epochs
+        self.input_modes = ["genome_data_dir", "dnase_data_dir"]
         if arch_fname is not None and weights_fname is not None:
             from keras.models import model_from_json
             self.model = model_from_json(open(arch_fname).read())

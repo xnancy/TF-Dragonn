@@ -61,8 +61,12 @@ The labels are stored in an `npy` file whose name is based on `--prefix`, the fu
 ## Model training
 Run the following command to train a model on the myc data using the data config file with processed regions and labels:
 ```
-tfdragonn train --data-config-file examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.json --prefix examples/train/myc_distrubted_batch_training
+tfdragonn train --model-type SequenceAndDnaseClassifier --processed-inputs-config-file examples/memmap/genome_and_DNASE_fc_memmaped.json --processed-intervals-config-file examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.json --prefix examples/train/myc_distrubted_batch_training
 ```
+#### --model-type
+`--model-type` specifies which models class in `tfdragonn/models.py` to train, in this example a sequence+dnase classifier.
+
+#### --prefix
 Based on the `--prefix`, this command writes a model architecture file to `examples/train/myc_distrubted_batch_training.arch.json` and a model weights file to `examples/train/myc_distrubted_batch_training.weights.h5` 
 
 ## Obtaining regions and corresponding predictions with trained models

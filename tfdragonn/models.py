@@ -188,7 +188,7 @@ class InmemSequenceClassifier(object):
 class SequenceClassifier(InmemSequenceClassifier):
     def __init__(self, *args, **kwargs):
         super(SequenceClassifier, self).__init__(*args, **kwargs)
-        self.input_models = ["genome_data_dir"]
+        self.input_modes = ["genome_data_dir"]
 
     def train_on_multiple_datasets(self, dataset2train_regions_and_labels, dataset2valid_regions_and_labels, dataset2fasta_extractor,
                                    task_names=None, save_best_model_to_prefix=None,

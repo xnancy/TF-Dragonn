@@ -81,17 +81,18 @@ def _get_bcolz_reader_fn(data, in_memory):
         function that takes np.array of BED-3 strings to read
     """
     def accessor_func(chrom, start, end):
-        return data[chrom][start:end, ...]
+        return data[chrom][..., start:end]
 
     # the first dim will vary by chrom
     data_shape = list(data[list(data.keys())[0]].shape)
+    print('>>>DATA SHAPE {}'.format(data_shape))
 
-    def extractor_func(bed3_entries):
+    def extractor_func(*bed3_entries):
         if bed3_entries[0].ndim != 1:
             raise IOError(
                 'BED-3 tensor has wrong number of dimensions (expected 1): {}'.format(
                     bed3_entries.ndim))
-        n_entries = bed3_entries.shape[0]
+        n_entries = bed3_entries[0].shape[0]
 
         if len(bed3_entries) == 1:  # a bed-3 tsv string tensor
             str_entries = bed3_entries.astype(str).tolist()
@@ -112,13 +113,16 @@ def _get_bcolz_reader_fn(data, in_memory):
 
         lens = np.array(ends) - np.array(starts)
         target_len = lens[0]
-        if not np.all(target_len == lens[0]):
+        if not np.all(lens == lens[0]):
             raise IOError('Inconsistent bed entry lengths: {}'.format(lens))
 
-        output_shape = [n_entries, target_len] + data_shape[1:]
+        output_shape = [n_entries] + data_shape[1:] + [target_len]
+        print('>>>OUTPUT SHAPE {}'.format(output_shape))
         output = np.empty(shape=output_shape, dtype=np.float32)
         for i, (chrom, start, end) in enumerate(zip(chrs, starts, ends)):
-            output[i, ...] = accessor_func(chrom, start, end)
+            fetched = accessor_func(chrom, start, end)
+            print('>>>FETCHED SHAPE {}'.format(fetched.shape))
+            output[..., i] = fetched
 
         return output
 

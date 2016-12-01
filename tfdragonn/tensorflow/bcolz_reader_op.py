@@ -13,8 +13,8 @@ import tensorflow as tf
 _data_cache = {}  # used to cache datasets to prevent re-loading
 
 
-def bcolz_interval_reader(intervals, data_directory, norm_params=None, in_memory=True,
-                          op_name='bcolz-reader', use_cache=True):
+def bcolz_interval_reader(intervals, data_directory, interval_size=1000, norm_params=None,
+                          in_memory=True, op_name='bcolz-reader', use_cache=True):
     """Op to read intervals from a data_directory.
 
     Params:
@@ -40,41 +40,46 @@ def bcolz_interval_reader(intervals, data_directory, norm_params=None, in_memory
                 for k in ['chrom', 'start', 'end']:
                     bed3_entries_tensors.append(intervals[k])
 
+        # Check what the size of the batches to read is
+        read_batch_size = bed3_entries_tensors[0].get_shape()[0].value
+
+        data = _load_directory(data_directory, in_memory, use_cache)
+        data_shape = list(data[list(data.keys())[0]].shape)
+
         bcolz_reader_fn = _get_bcolz_reader_fn(
-            data_directory, in_memory, use_cache)
+            data, in_memory)
         read_values = _get_pyfunc_from_reader_fn(
             bcolz_reader_fn, bed3_entries_tensors, op_name)
+
+        output_shape = [read_batch_size, interval_size] + data_shape[1:]
+        read_values = tf.reshape(read_values, output_shape)
 
         if norm_params:  # TODO(cprobert): implement normalization parameters
             with tf.variable_scope('normalizer'):
                 assert (norm_params == 'local_zscore')
-                assert (len(read_values.get_shape()) == 2)
                 mean, var = tf.nn.moments(read_values, [1], keep_dims=True)
                 std = tf.maximum(tf.abs(tf.sqrt(var)), 0.0001)
                 read_values = (read_values - mean) / std
-                asserts = [tf.Assert(tf.is_finite(read_values))]
-                read_values = tf.with_dependencies(asserts, read_values)
+                read_values = tf.verify_tensor_all_finite(read_values, "non-finite values!")
 
         return read_values
 
 
 def _get_pyfunc_from_reader_fn(reader_fn, bed3_entries_tensors, op_name):
-    return tf.py_func(reader_fn, [bed3_entries_tensors], tf.float32,
-                      stateful=False, name=op_name)
+    return tf.py_func(reader_fn, bed3_entries_tensors, tf.float32,
+                      name=op_name)
 
 
-def _get_bcolz_reader_fn(data_directory, in_memory, use_cache):
+def _get_bcolz_reader_fn(data, in_memory):
     """Generate a function to read from a bcolz-compressed data directory.
 
     Params:
         bed3_entries_tensor: a tensor of BED-3 entry strings to read
-        data_directory: the data directory containing chromosome subdirectories
+        data: the data from _load_directory
         in_memory: whether to pre-load compressed data into memory (must be false if v-plot input)
     Returns:
         function that takes np.array of BED-3 strings to read
     """
-    data = _load_directory(data_directory, in_memory, use_cache)
-
     def accessor_func(chrom, start, end):
         return data[chrom][start:end, ...]
 

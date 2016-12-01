@@ -26,7 +26,7 @@ def examples_queue(intervals, data, labels=None, name='examples-queue'):
     Returns:
         a queue reference
     """
-    tensors_to_enqueue = OrderedDict
+    tensors_to_enqueue = OrderedDict()
 
     for k, v in intervals.items():
         tensors_to_enqueue['intervals/{}'.format(k)] = v
@@ -45,7 +45,7 @@ def examples_queue(intervals, data, labels=None, name='examples-queue'):
     with tf.variable_scope(name):
         queue = tf.FIFOQueue(capacity=_DEFAULT_BUFFER_CAPACITY, dtypes=dtypes, shapes=shapes,
                              names=names, name='examples-queue')
-        enqueue_op = queue.enqueue(tensors_to_enqueue)
+        enqueue_op = queue.enqueue_many(tensors_to_enqueue)
         queue_runner = tf.train.QueueRunner(
             queue=queue, enqueue_ops=[enqueue_op], close_op=queue.close(),
             cancel_op=queue.close(cancel_pending_enqueues=True))

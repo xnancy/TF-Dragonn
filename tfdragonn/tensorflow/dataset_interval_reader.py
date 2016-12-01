@@ -65,14 +65,16 @@ def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-rea
     with tf.variable_scope(name):
 
         # Queue to store intervals to read, outputs are dequeued tensors
+        interval_size = int(intervals['end'][0] - intervals['start'][0])
         to_read = interval_queue(intervals, labels, dequeue_size=read_batch_size,
                                  name='interval-queue')
+
         # Create a reader for each datafile
         read_values = {}
         for k, datafile in datafiles.items():
             norm_params = 'local_zscore' if k == 'dnase_data_dir' else None
             read_values[k] = bcolz_interval_reader(
-                to_read, datafile, norm_params, op_name='{}-bcolz-reader'.format(
+                to_read, datafile, interval_size, norm_params, op_name='{}-bcolz-reader'.format(
                     k),
                 use_cache=True)
 

@@ -49,7 +49,7 @@ def interval_queue(intervals, labels=None, dequeue_size=128, name='interval-queu
             'end': end_queue.dequeue_many(dequeue_size),
         }
 
-        if labels:
+        if labels is not None:
             label_queue = tf.train.input_producer(
                 tf.convert_to_tensor(labels), shuffle=False, capacity=_DEFAULT_BUFFER_CAPACITY,
                 name='labels-buffer')

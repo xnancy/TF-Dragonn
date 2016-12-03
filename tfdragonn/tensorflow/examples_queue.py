@@ -34,7 +34,7 @@ def examples_queue(intervals, data, labels=None, name='examples-queue'):
     for k, v in data.items():
         tensors_to_enqueue['data/{}'.format(k)] = v
 
-    if labels:
+    if labels is not None:
         tensors_to_enqueue['labels'] = labels
 
     shapes = [t.get_shape()[1:] for t in tensors_to_enqueue.values()]

@@ -21,7 +21,7 @@ def examples_queue(intervals, data, labels=None, name='examples-queue'):
             1) intervals encoded as 'chrom': (string), 'start': (int), and 'stop': (int), or
             2) intervals encoded as 'bed3': (string) TSV entries
         data: a dict of tensors with first dimension N.
-        labels: (optional) a dict of tensors, each with first dimension N.
+        labels: (optional) a tensor with dimensions N X T.
         name: (optional) string, name for this queue
     Returns:
         a queue reference
@@ -35,8 +35,7 @@ def examples_queue(intervals, data, labels=None, name='examples-queue'):
         tensors_to_enqueue['data/{}'.format(k)] = v
 
     if labels:
-        for k, v in labels.items():
-            tensors_to_enqueue['labels/'.format(k)] = v
+        tensors_to_enqueue['labels'] = labels
 
     shapes = [t.get_shape()[1:] for t in tensors_to_enqueue.values()]
     dtypes = [t.dtype for t in tensors_to_enqueue.values()]

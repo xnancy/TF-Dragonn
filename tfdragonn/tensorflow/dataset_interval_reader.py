@@ -74,16 +74,14 @@ def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-rea
         for k, datafile in datafiles.items():
             norm_params = 'local_zscore' if k == 'dnase_data_dir' else None
             read_values[k] = bcolz_interval_reader(
-                to_read, datafile, interval_size, norm_params, op_name='{}-bcolz-reader'.format(
-                    k),
-                use_cache=True)
+                to_read, datafile, interval_size, norm_params, op_name='{}-reader'.format(k))
 
         # Enqueue the read values, along with labels and intervals
         interval_tensor_dict = {k: to_read[k]
                                 for k in ['chrom', 'start', 'end']}
-        label_tensor_dict = None
+        batch_labels = None
         if 'labels' in to_read:
-            label_tensor_dict = to_read['labels']
-        ex_queue = examples_queue(interval_tensor_dict, read_values, label_tensor_dict,
+            batch_labels = to_read['labels']
+        ex_queue = examples_queue(interval_tensor_dict, read_values, batch_labels,
                                   name='examples-queue')
         return ex_queue

@@ -15,7 +15,7 @@ Each dataset consists of one or more datafiles, and one set of intervals and lab
 """
 
 
-def get_readers(processed_inputs_file, processed_intervals_file):
+def get_readers_and_tasks(processed_inputs_file, processed_intervals_file):
     """Generate a reader and examples queue for each dataset.
 
     Args:

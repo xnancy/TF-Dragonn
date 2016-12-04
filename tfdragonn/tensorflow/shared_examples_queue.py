@@ -58,12 +58,12 @@ class SharedExamplesQueue(object):
                     tensors_to_enqueue, batch_size, num_threads=4, capacity=capacity,
                     enqueue_many=True)
 
-        @property
-        def outputs(self):
-            """The outputs of the shared examples queue."""
-            return self._outputs
+    @property
+    def outputs(self):
+        """The outputs of the shared examples queue."""
+        return self._outputs
 
-        @property
-        def dataset_labels(self):
-            """The dataset labels that `dataset-index` corresponds to."""
-            return self.reader_keys
+    @property
+    def dataset_labels(self):
+        """The dataset labels that `dataset-index` corresponds to."""
+        return self.reader_keys

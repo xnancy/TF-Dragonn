@@ -21,8 +21,8 @@ def get_readers(processed_inputs_file, processed_intervals_file):
     Args:
         processed_inputs_file: json file with processed input data directories for each dataset
         processed_intervals_file: json file with processed intervals files for each dataset
-    Returns:
-        a dictionary of examples queues for each dataset. Each queue contains the tensors:
+    Returns: a tuple of:
+        readers: a dictionary of an examples queue for each dataset. Each queue contains:
             intervals/start (int) - the start coordinate of the intervals
             intervals/end (int) - the end coordinate of the intervals
             intervals/chrom (string) - the chroms of the intervals
@@ -30,10 +30,13 @@ def get_readers(processed_inputs_file, processed_intervals_file):
                 data fields that were read and possibly normalized
 
             iff labels are specified in the `processed_intervals_file`, also:
-            labels/{task_name} (e.g. `labels/CTCF`) - the labels for each interval for each task
+            labels - the labels for each interval for each task (size T)
+        task names:
+            a list of strings of task names, of size T
     """
     datasets = parse_inputs_and_intervals(
         processed_inputs_file, processed_intervals_file)
+    task_names = datasets[list(datasets.keys())[0]]['task_names']
 
     examples_queues = {}
     for dataset_id, dataset in datasets.items():
@@ -45,7 +48,7 @@ def get_readers(processed_inputs_file, processed_intervals_file):
         examples_queues[dataset_id] = get_readers_for_dataset(
             intervals, datafiles, labels, name=dataset_id)
 
-    return examples_queues
+    return examples_queues, task_names
 
 
 def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-reader',

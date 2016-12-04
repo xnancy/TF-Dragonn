@@ -49,9 +49,9 @@ def get_shared_batch(readers, batch_size=128, shuffle=True, capacity=5000,
 
         if shuffle:
             min_after_dequeue = int(0.5 * capacity)
-            outputs = tf.train.batch(tensors_to_enqueue, batch_size, capacity=capacity,
-                                     min_after_dequeue=min_after_dequeue, num_threads=4,
-                                     enqueue_many=True)
+            outputs = tf.train.shuffle_batch(tensors_to_enqueue, batch_size, capacity=capacity,
+                                             min_after_dequeue=min_after_dequeue, num_threads=4,
+                                             enqueue_many=True)
 
         else:
             outputs = tf.train.batch(tensors_to_enqueue, batch_size, num_threads=4,

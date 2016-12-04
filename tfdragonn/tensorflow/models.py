@@ -4,6 +4,9 @@ from abc import abstractmethod, abstractproperty, ABCMeta
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
+import initializers
+
+
 class Classifier(object):
     __metaclass__ = ABCMeta
 
@@ -23,6 +26,7 @@ class Classifier(object):
         logits = self.get_logits(inputs)
         preds = tf.sigmoid(logits, name="preds")
         return preds
+
 
 class SequenceAndDnaseClassifier(Classifier):
 
@@ -49,22 +53,39 @@ class SequenceAndDnaseClassifier(Classifier):
         self.num_combined_filters = num_combined_filters
 
     def get_logits(inputs):
-        with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                            reuse=False,
-                            activation_fn=tf.nn.relu,
-                            weights_initializer=tf.truncated_normal_initializer(stddev=0.1), # change to he_normal
-                            biases_initializer=tf.constant_initializer(0.0)):
-            seq_preds = inputs["genome_data_dir"]
-            for i, (num_filter, filter_width) in enumerate(zip(self.num_seq_filters, self.seq_conv_width)):
-                seq_preds = slim.conv2d(seq_preds, num_filter, [4 if i==0 else 1, filter_width], padding='VALID', scope='sequence_conv{:d}'.format(i + 1))
-            dnase_preds = inputs["dnase_data_dir"]
-            for i, (num_filter, filter_width) in enumerate(zip(self.num_dnase_filters, self.dnase_conv_width)):
-                dnase_preds = slim.conv2d(dnase_preds, num_filter, [1, filter_width], padding='VALID', scope='dnase_conv{:d}'.format(i + 1))
-            preds = tf.concat(1, [seq_preds, dnase_preds]) # check if concatenation axis is correct
-            for i, (num_filter, filter_width) in enumerate(zip(self.num_combined_filters, self.combined_conv_width)):
-                preds = slim.conv2d(preds, num_filters, [2 if i==0 else 1, filter_width], padding='VALID', scope='combined_conv{:d}'.format(i + 1))
-            preds = slim.avg_pool2d(net, [1, self.pool_width], stride=[1, self.pool_width], padding='VALID', scope='avg_pool')
-            preds = slim.flatten(preds)
-            preds = slim.fully_connected(preds, self.num_tasks, activation_fn=None, scope='fc')
+        with slim.arg_scope(
+                [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
+                weights_initializer=initializers.he_normal_initializer(),
+                biases_initializer=tf.constant_initializer(0.0)):
 
-            return preds
+            seq_preds = inputs["data/genome_data_dir"]
+            for i, (num_filter, filter_width) in enumerate(
+                    zip(self.num_seq_filters, self.seq_conv_width)):
+                filter_height = 4 if i == 0 else 1
+                filter_dims = [filter_height, filter_width]
+                seq_preds = slim.conv2d(seq_preds, num_filter, filter_dims, padding='VALID',
+                                        scope='sequence_conv{:d}'.format(i + 1))
+
+            dnase_preds = inputs["data/dnase_data_dir"]
+            for i, (num_filter, filter_width) in enumerate(
+                    zip(self.num_dnase_filters, self.dnase_conv_width)):
+                fitler_dims = [1, filter_width]
+                dnase_preds = slim.conv2d(dnase_preds, num_filter, fitler_dims, padding='VALID',
+                                          scope='dnase_conv{:d}'.format(i + 1))
+
+            # check if concatenation axis is correct
+            logits = tf.concat(1, [seq_preds, dnase_preds])
+            for i, (num_filter, filter_width) in enumerate(
+                    zip(self.num_combined_filters, self.combined_conv_width)):
+                filter_height = 2 if i == 0 else 1
+                filter_dims = [filter_height, filter_width]
+                logits = slim.conv2d(logits, num_filters, filter_dims, padding='VALID',
+                                     scope='combined_conv{:d}'.format(i + 1))
+
+            logits = slim.avg_pool2d(net, [1, self.pool_width], stride=[1, self.pool_width],
+                                     padding='VALID', scope='avg_pool')
+            logits = slim.flatten(logits, scope='flatten')
+            logits = slim.fully_connected(
+                logits, self.num_tasks, activation_fn=None, scope='fc')
+
+            return logits

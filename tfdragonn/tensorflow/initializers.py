@@ -56,7 +56,7 @@ def glorot_uniform(shape, dtype=tf.float32, name=None):
 def he_normal_initializer(dtype=tf.float32):
     def _he_normal_initializer(shape, dtype=dtype, **kwargs):
         scale = get_he_normal_scale(shape)
-        return tf.random_normal(shape, 0.0, scale, dtype=dtype, **kwargs)
+        return tf.random_normal(shape, 0.0, scale, dtype=dtype)
     return _he_normal_initializer
 
 

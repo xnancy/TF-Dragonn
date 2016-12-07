@@ -270,7 +270,10 @@ def main_train(processed_intervals_config_file=None,
             dataset_input_mode = processed_inputs[input_mode]
             if dataset_input_mode not in input_mode2extractor:
                 extractor_type = processed_input2extractor[input_mode]
-                input_mode2extractor[dataset_input_mode] = extractor_type(dataset_input_mode)
+                if input_mode == "dnase_data_dir":
+                    input_mode2extractor[dataset_input_mode] = extractor_type(dataset_input_mode, local_norm_halfwidth=interval_length/2)
+                else:
+                    input_mode2extractor[dataset_input_mode] = extractor_type(dataset_input_mode)
             dataset_id2extractors[dataset_id].append(input_mode2extractor[dataset_input_mode])
         logger.info("Initialized extractors for {}".format(input_mode))
     if training_config_file is not None:

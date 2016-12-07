@@ -18,8 +18,6 @@ class SharedExamplesQueue(object):
             shuffle: whether to shuffle the returned batches
             capacity: the size of the buffer used for batching
             name: the namespace used
-        Returns:
-            batch: a dictionary of tensors with first dimension batch_size
 
         For consitency, each reader must have the same fields.
         """

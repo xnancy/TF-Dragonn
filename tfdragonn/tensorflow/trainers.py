@@ -7,6 +7,10 @@ import tensorflow.contrib.slim as slim
 
 from models import Classifier
 
+TRAIN_DIR_NAME = 'train'
+VALID_DIR_NAME = 'valid'
+TEST_DIR_NAME = 'test'
+
 
 class ClassiferTrainer(object):
 
@@ -25,9 +29,26 @@ class ClassiferTrainer(object):
         self.early_stopping_patience = early_stopping_patience
         self.save_best_model_to_prefix = save_best_model_to_prefix
 
+    def get_ambiguous_mask(self, labels, dtype=tf.float32, name='ambiguous-examples-mask'):
+        """Return a weights matrix with the same size as labels. Entries in labels
+            equal to -1 are masked with `0`, all other values are `1`.
+        """
+        assert(labels.dtype in [tf.int32, tf.int64])
+        with tf.variable_scope(name):
+            mask = tf.where(tf.equal(labels, -1), tf.zeros_like(labels, dtype=dtype),
+                            tf.ones_like(labels, dtype=dtype))
+        return mask
+
     def get_loss(self, logits, labels):
-        _ = slim.losses.sigmoid_cross_entropy(logits, labels)
-        total_loss = slim.losses.get_total_loss()
+        ambig_mask = self.get_ambiguous_mask(labels)
+        weights = ambig_mask  # TODO(cprobert): we could support additional weights here
+
+        sigmoid_xentropy_loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
+        tf.scalar_summary(sigmoid_xentropy_loss, 'simoid-xentropy-loss')
+
+        total_loss = slim.losses.get_total_loss()  # this adds regularization if it's specified
+        tf.scalar_summary(total_loss, 'total-loss')
+
         return total_loss
 
     def test_in_session(self, sess, dataset_id2data_queue):

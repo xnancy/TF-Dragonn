@@ -1,3 +1,4 @@
+from abc import abstractmethod, ABCMeta
 from builtins import zip
 import collections
 import inspect
@@ -134,6 +135,10 @@ class Datasets(object):
         return all(dataset.regions is not None for dataset in self.datasets)
 
     @property
+    def include_regions_or_region_bed(self):
+        return all(dataset.region_bed is not None or dataset.regions is not None for dataset in self.datasets)
+
+    @property
     def include_labels(self):
         return all(dataset.labels is not None for dataset in self.datasets)
 
@@ -264,3 +269,286 @@ def parse_data_config_file(data_config_file):
                     data[dataset_id] = Dataset(**dataset)
 
     return Datasets(data, task_names)
+
+
+class RawInputs(object):
+    @property
+    def has_dnase_bigwig(self):
+        return self.dnase_bigwig is not None
+
+    @property
+    def has_genome_fasta(self):
+        return self.genome_fasta is not None
+
+    def __init__(self, dnase_bigwig=None, genome_fasta=None):
+        self.dnase_bigwig = dnase_bigwig
+        self.genome_fasta = genome_fasta
+
+
+class ProcessedInputs(object):
+    @property
+    def has_dnase_data_dir(self):
+        return self.dnase_data_dir is not None
+
+    @property
+    def has_genome_data_dir(self):
+        return self.genome_data_dir is not None
+
+    def __init__(self, dnase_data_dir=None, genome_data_dir=None):
+        self.dnase_data_dir = dnase_data_dir
+        self.genome_data_dir = genome_data_dir
+
+raw_input2processed_input = {"dnase_bigwig": "dnase_data_dir",
+                             "genome_fasta": "genome_data_dir"}
+
+def check_property_consistency(config, target_property):
+    dataset_id1, dataset_class1 = next(config.__iter__())
+    expected_property_value = getattr(dataset_class1, target_property)
+    for dataset_id2, dataset_class2 in config:
+        if getattr(dataset_class2, target_property) == expected_property_value:
+            pass
+        else:
+            return (dataset_id1, dataset_id2)
+    return True
+
+
+class Config(object):
+     __metaclass__ = ABCMeta
+
+     @abstractmethod
+     def __iter__(self):
+         pass
+
+     @abstractmethod
+     def __init__(self):
+         pass
+
+     def check_property_consistency(self, target_property):
+         dataset_id1, dataset_class1 = next(self.__iter__())
+         expected_property_value = getattr(dataset_class1, target_property)
+         for dataset_id2, dataset_class2 in self:
+             if getattr(dataset_class2, target_property) == expected_property_value:
+                 pass
+             else:
+                 return (dataset_id1, dataset_id2)
+             return True
+
+     def to_dict(self):
+         datasets_dict = collections.OrderedDict()
+         if hasattr(self, "task_names"):
+             datasets_dict["task_names"] = self.task_names
+         for dataset_id, dataset_data in self:
+             datasets_dict[dataset_id] = dataset_data.__dict__
+
+         return datasets_dict
+
+
+class RawInputsConfig(Config):
+    """
+    A class for the raw inputs config file.
+
+    Parameters
+    ----------
+    dataset_id2raw_inputs : dict
+        keys are data set id strigs, values are instances of RawInputs.
+    """
+    def __init__(self, dataset_id2raw_inputs):
+        self.dataset_ids = dataset_id2raw_inputs.keys()
+        self.raw_inputs_list = dataset_id2raw_inputs.values()
+        # check for consistent raw inputs
+        rv = check_property_consistency(self, "has_genome_fasta")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent genome fasta types!".format(dataset_id1, dataset_id2))
+        rv = self.check_property_consistency("has_dnase_bigwig")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent dnase bigwig types!".format(dataset_id1, dataset_id2))
+
+    def __iter__(self):
+        return zip(self.dataset_ids, self.raw_inputs_list)
+
+
+class ProcessedInputsConfig(Config):
+    """
+    A class for the processed inputs config file.
+
+    Parameters
+    ----------
+    dataset_id2processed_inputs : dict
+        keys are data set id strigs, values are instances of ProcessedInputs.
+    """
+    @property
+    def has_genome_data_dir(self):
+        return self.processed_inputs_list[0].has_genome_data_dir
+
+    @property
+    def has_dnase_data_dir(self):
+        return self.processed_inputs_list[0].has_dnase_data_dir
+
+    def __init__(self, dataset_id2processed_inputs):
+        self.dataset_ids = dataset_id2processed_inputs.keys()
+        self.processed_inputs_list = dataset_id2processed_inputs.values()
+        # check for consistent processed inputs
+        rv = self.check_property_consistency( "has_genome_data_dir")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent genome data dir types!".format(dataset_id1, dataset_id2))
+        rv = check_property_consistency(self, "has_dnase_data_dir")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent dnase data dir types!".format(dataset_id1, dataset_id2))
+
+    def __iter__(self):
+        return zip(self.dataset_ids, self.processed_inputs_list)
+
+
+def parse_raw_inputs_config_file(raw_input_config_fname):
+    """
+    Returns instance of RawInputsConfig
+    """
+    dataset_id2raw_inputs = json.load(open(raw_input_config_fname), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, raw_inputs in dataset_id2raw_inputs.items():
+        dataset_id2raw_inputs[dataset_id] = RawInputs(**raw_inputs)
+
+    return RawInputsConfig(dataset_id2raw_inputs)
+
+
+def parse_processed_inputs_config_file(processed_input_config_fname):
+    """
+    Returns instance of RawInputsConfig
+    """
+    dataset_id2processed_inputs = json.load(open(processed_input_config_fname), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, processed_inputs in dataset_id2processed_inputs.items():
+        dataset_id2processed_inputs[dataset_id] = ProcessedInputs(**processed_inputs)
+
+    return ProcessedInputsConfig(dataset_id2processed_inputs)
+
+
+class RawIntervals(object):
+
+    @property
+    def has_feature_beds(self):
+        return self.feature_beds is not None
+
+    @property
+    def has_region_bed(self):
+        self.region_bed is not None
+
+    def __init__(self, feature_beds=None,
+                 ambiguous_feature_beds=None, region_bed=None):
+        self.feature_beds = feature_beds
+        self.ambiguous_feature_beds = ambiguous_feature_beds
+        self.region_bed = region_bed
+
+
+class RawIntervalsConfig(Config):
+    def __iter__(self):
+        return zip(self.dataset_ids, self.raw_intervals_list)
+
+    def __init__(self, dataset_id2raw_intervals, task_names):
+        assert isinstance(task_names, list), "task_names must be a list!"
+
+        self.dataset_ids = dataset_id2raw_intervals.keys()
+        self.raw_intervals_list = dataset_id2raw_intervals.values()
+        self.task_names = task_names
+
+        # check that task names in raw intervals are present in task_names
+        task_names = set(task_names)
+        assert len(task_names) == len(self.task_names), "task names must be unique!"
+        for dataset_id, raw_intervals in self:
+            assert type(raw_intervals.feature_beds) is collections.OrderedDict, "feature beds in dataset {} are not a dictionary:\n{}".format(dataset_id, raw_intervals.feature_beds)
+            dataset_task_names = set(raw_intervals.feature_beds.keys())
+            assert dataset_task_names.issubset(task_names), "Tasks {} in {} are not in task_names!".format(dataset_task_names - task_names, dataset_id)
+            if raw_intervals.ambiguous_feature_beds is not None:
+                assert type(raw_intervals.ambiguous_feature_beds) is collections.OrderedDict, "ambiguous feature beds in dataset {} are not a dictionary:\n{}".format(dataset_id, raw_intervals.ambiguous_feature_beds)
+                dataset_ambiguous_task_names = set(raw_intervals.ambiguous_feature_beds.keys())
+                assert dataset_ambiguous_task_names.issubset(task_names), "Tasks {} in {} are not in task_names!".format(dataset_ambiguous_task_names - task_names, dataset_id)
+                assert dataset_ambiguous_task_names.issubset(dataset_task_names), "Tasks {} in ambiguous features beds in {} are not in feature beds!".format(
+                    dataset_ambiguous_task_names - dataset_task_names, dataset_id)
+
+        # converts dictionaries of feature and ambiguous beds to uniformly ordered lists of files
+        for i, (dataset_id, raw_intervals) in enumerate(self):
+            feature_beds_list = []
+            for task_name in self.task_names:
+                feature_beds_list.append(raw_intervals.feature_beds[task_name] if task_name in raw_intervals.feature_beds.keys() else None)
+            self.raw_intervals_list[i].feature_beds = feature_beds_list
+            if raw_intervals.ambiguous_feature_beds is not None:
+                ambiguous_feature_beds_list = []
+                for task_name in self.task_names:
+                    ambiguous_feature_beds_list.append(raw_intervals.ambiguous_feature_beds[task_name] if task_name in raw_intervals.ambiguous_feature_beds.keys() else None)
+                self.raw_intervals_list[i].ambiguous_feature_beds = ambiguous_feature_beds_list
+            else:
+                self.raw_intervals_list[i].ambiguous_feature_beds = None
+
+
+def parse_raw_intervals_config_file(raw_intervals_config_file):
+    """
+    Returns instance of RawIntervalsConfig
+    """
+    dataset_id2raw_intervals = json.load(open(raw_intervals_config_file), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, raw_intervals in dataset_id2raw_intervals.items():
+        if dataset_id == "task_names":
+            task_names = raw_intervals
+            del dataset_id2raw_intervals["task_names"]
+            continue
+        dataset_id2raw_intervals[dataset_id] = RawIntervals(**raw_intervals)
+
+    return RawIntervalsConfig(dataset_id2raw_intervals, task_names)
+
+
+class ProcessedIntervals(object):
+
+    @property
+    def has_labels(self):
+        return self.labels is not None
+
+    def __init__(self, regions, labels=None):
+        self.regions = regions
+        self.labels= labels
+
+
+class ProcessedIntervalsConfig(Config):
+
+    @property
+    def has_labels(self):
+        return self.processed_intervals_list[0].has_labels
+
+    def __iter__(self):
+        return zip(self.dataset_ids, self.processed_intervals_list)
+
+    def __init__(self, dataset_id2processed_intervals, task_names):
+        assert isinstance(task_names, list), "task_names must be a list!"
+
+        self.dataset_ids = dataset_id2processed_intervals.keys()
+        self.processed_intervals_list = dataset_id2processed_intervals.values()
+        self.task_names = task_names
+        # check for consistent presence of labels
+        rv = self.check_property_consistency( "has_labels")
+        if rv is True:
+            pass
+        else:
+            dataset_id1, dataset_id2 = rv
+            raise ValueError("Datasets {} and {} have inconsistent presence of labels!".format(dataset_id1, dataset_id2))
+
+def parse_processed_intervals_config_file(processed_intervals_config_file):
+    """
+    Returns instance of ProcessedIntervalsConfig
+    """
+    dataset_id2processed_intervals = json.load(open(processed_intervals_config_file), object_pairs_hook=collections.OrderedDict)
+    for dataset_id, processed_intervals in dataset_id2processed_intervals.items():
+        if dataset_id == "task_names":
+            task_names = processed_intervals
+            del dataset_id2processed_intervals["task_names"]
+            continue
+        dataset_id2processed_intervals[dataset_id] = ProcessedIntervals(**processed_intervals)
+
+    return ProcessedIntervalsConfig(dataset_id2processed_intervals, task_names)

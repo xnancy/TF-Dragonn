@@ -1,0 +1,31 @@
+{
+    "task_names": ["MYC"],
+    "A549": {
+        "region_bed": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/DNASE/peaks/conservative/DNASE.A549.conservative.narrowPeak.gz", 
+	"ambiguous_feature_beds": {"MYC": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/ChIPseq/peaks/relaxed/ChIPseq.A549.MYC.relaxed.narrowPeak.gz"
+	}, 
+        "feature_beds": {"MYC": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/ChIPseq/peaks/conservative/ChIPseq.A549.MYC.conservative.train.narrowPeak.gz"
+	}
+    }, 
+    "HeLa-S3": {
+        "region_bed": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/DNASE/peaks/conservative/DNASE.HeLa-S3.conservative.narrowPeak.gz", 
+	"ambiguous_feature_beds": {"MYC": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/ChIPseq/peaks/relaxed/ChIPseq.HeLa-S3.MYC.relaxed.narrowPeak.gz"
+        },
+        "feature_beds": {"MYC": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/ChIPseq/peaks/conservative/ChIPseq.HeLa-S3.MYC.conservative.train.narrowPeak.gz"
+	}
+    },  
+    "K562": {
+        "region_bed": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/DNASE/peaks/conservative/DNASE.K562.conservative.narrowPeak.gz", 
+	"ambiguous_feature_beds": {"MYC": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/ChIPseq/peaks/relaxed/ChIPseq.K562.MYC.relaxed.narrowPeak.gz"
+        },
+        "feature_beds": {"MYC": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/ChIPseq/peaks/conservative/ChIPseq.K562.MYC.conservative.train.narrowPeak.gz"
+	}
+    },
+    "MCF-7": {
+        "region_bed": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/DNASE/peaks/conservative/DNASE.MCF-7.conservative.narrowPeak.gz", 
+	"ambiguous_feature_beds": {"MYC": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/ChIPseq/peaks/relaxed/ChIPseq.MCF-7.MYC.relaxed.narrowPeak.gz"
+        },
+        "feature_beds": {"MYC": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/ChIPseq/peaks/conservative/ChIPseq.MCF-7.MYC.conservative.train.narrowPeak.gz"
+	}
+    }
+}

@@ -8,7 +8,7 @@ import tensorflow as tf
 class SharedExamplesQueue(object):
     """A container for a shared examples queue and metadata."""
 
-    def __init__(self, readers, batch_size=128, shuffle=True, capacity=5000,
+    def __init__(self, readers, task_names, batch_size=128, shuffle=True, capacity=5000,
                  name='shared-examples-queue'):
         """Construct a shared examples queue for a dict of readers.
 
@@ -28,6 +28,7 @@ class SharedExamplesQueue(object):
         for reader in readers.values():
             data_keys = data_keys.union(reader.names)
         self.data_keys = list(data_keys)
+        self._task_names = task_names
 
         with tf.variable_scope(name):
             dequeues = {k: v.dequeue() for k, v in readers.items()}
@@ -60,6 +61,11 @@ class SharedExamplesQueue(object):
     def outputs(self):
         """The outputs of the shared examples queue."""
         return self._outputs
+
+    @property
+    def task_names(self):
+        """The task names of the queue."""
+        return self._task_names
 
     @property
     def dataset_labels(self):

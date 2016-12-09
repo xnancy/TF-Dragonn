@@ -22,10 +22,9 @@ class Classifier(object):
     def get_logits(inputs):
         pass
 
-    def get_preds(self, inputs):
-        logits = self.get_logits(inputs)
-        preds = tf.sigmoid(logits, name="preds")
-        return preds
+    @property
+    def num_tasks(self):
+        return self._num_tasks
 
 
 class SequenceAndDnaseClassifier(Classifier):
@@ -43,7 +42,7 @@ class SequenceAndDnaseClassifier(Classifier):
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
 
-        self.num_tasks = num_tasks
+        self._num_tasks = num_tasks
         self.num_seq_filters = num_seq_filters
         self.seq_conv_width = seq_conv_width
         self.num_dnase_filters = num_dnase_filters
@@ -59,15 +58,15 @@ class SequenceAndDnaseClassifier(Classifier):
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
 
-            def expand_4D(input):
-                shape = [x.value for x in input.get_shape()]
+            def expand_4D(input_tensor):
+                shape = [x.value for x in input_tensor.get_shape()]
                 if len(shape) == 2:  # 1-D input
                     new_shape = [shape[0], 1, shape[1], 1]
                 elif len(shape) == 3:  # 2-D input
                     new_shape = shape + [1]
                 else:
-                    raise IOError('inrecognized shape: {}'.format(shape))
-                return tf.reshape(input, new_shape)
+                    raise IOError('unrecognized shape: {}'.format(shape))
+                return tf.reshape(input_tensor, new_shape)
 
             seq_preds = inputs["data/genome_data_dir"]
             seq_preds = expand_4D(seq_preds)

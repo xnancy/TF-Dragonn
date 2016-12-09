@@ -16,7 +16,7 @@ Each dataset consists of one or more datafiles, and one set of intervals and lab
 """
 
 
-def get_readers_and_tasks(processed_inputs_file, processed_intervals_file):
+def get_readers_and_tasks(processed_inputs_file, processed_intervals_file, name='data-readers'):
     """Generate a reader and examples queue for each dataset.
 
     Args:
@@ -35,25 +35,27 @@ def get_readers_and_tasks(processed_inputs_file, processed_intervals_file):
         task names:
             a list of strings of task names, of size T
     """
-    datasets = parse_inputs_and_intervals(
-        processed_inputs_file, processed_intervals_file)
-    task_names = datasets[list(datasets.keys())[0]]['task_names']
+    with tf.variable_scope(name):
+        datasets = parse_inputs_and_intervals(
+            processed_inputs_file, processed_intervals_file)
+        task_names = datasets[list(datasets.keys())[0]]['task_names']
 
-    examples_queues = {}
-    for dataset_id, dataset in datasets.items():
-        intervals = dataset['intervals']
-        datafiles = dataset['inputs']
-        labels = None
-        if 'labels' in dataset.keys():
-            labels = dataset['labels']
-        examples_queues[dataset_id] = get_readers_for_dataset(
-            intervals, datafiles, labels, name=dataset_id)
+        examples_queues = {}
+        for dataset_id, dataset in datasets.items():
+            intervals = dataset['intervals']
+            datafiles = dataset['inputs']
+            labels = None
+            if 'labels' in dataset.keys():
+                labels = dataset['labels']
+            examples_queues[dataset_id] = get_readers_for_dataset(
+                intervals, datafiles, labels, name=dataset_id)
 
     return examples_queues, task_names
 
 
 def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_intervals_file,
-                                        validation_chroms=[], holdout_chroms=[]):
+                                        validation_chroms=[], holdout_chroms=[],
+                                        name='data-readers'):
     """Generate two reader and examples queues for train/validation of each dataset.
 
     Args:
@@ -61,7 +63,9 @@ def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_interva
         processed_intervals_file: json file with processed intervals files for each dataset
         validation_chroms: (optional) list of chrom strings to provide as validation examples
         holdout_chroms: (optional) list of heldout chrom strings that will not be provided
-    Returns: a 3-tuple of:
+
+    Returns: a 3-tuple of (train_readers, validation_readers, task_names):
+
         train_readers: a dictionary of an examples queue for each dataset. Each queue contains:
             intervals/start (int) - the start coordinate of the intervals
             intervals/end (int) - the end coordinate of the intervals
@@ -76,44 +80,45 @@ def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_interva
         task names:
             a list of strings of task names, of size T
     """
-    # Check validation and holdout chrom sets are mutually exclusive
-    validation_and_holdout_chroms = set(
-        validation_chroms).intersection(holdout_chroms)
-    if len(validation_and_holdout_chroms) != 0:
-        raise IOError('Some chroms were specified for both validation and holdout: {}'.format(
-            validation_and_holdout_chroms))
+    with tf.variable_scope(name):
+        # Check validation and holdout chrom sets are mutually exclusive
+        validation_and_holdout_chroms = set(
+            validation_chroms).intersection(holdout_chroms)
+        if len(validation_and_holdout_chroms) != 0:
+            raise IOError('Some chroms were specified for both validation and holdout: {}'.format(
+                validation_and_holdout_chroms))
 
-    datasets = parse_inputs_and_intervals(
-        processed_inputs_file, processed_intervals_file)
-    task_names = datasets[list(datasets.keys())[0]]['task_names']
+        datasets = parse_inputs_and_intervals(
+            processed_inputs_file, processed_intervals_file)
+        task_names = datasets[list(datasets.keys())[0]]['task_names']
 
-    train_examples_queues = {}
-    valid_examples_queues = {}
-    for dataset_id, dataset in datasets.items():
-        intervals = dataset['intervals']
+        train_examples_queues = {}
+        valid_examples_queues = {}
+        for dataset_id, dataset in datasets.items():
+            intervals = dataset['intervals']
 
-        validation_idxs = np.in1d(intervals['chrom'], validation_chroms)
-        holdout_idxs = np.in1d(intervals['chrom'], holdout_chroms)
-        train_idxs = ~ np.logical_or(validation_idxs, holdout_idxs)
+            validation_idxs = np.in1d(intervals['chrom'], validation_chroms)
+            holdout_idxs = np.in1d(intervals['chrom'], holdout_chroms)
+            train_idxs = ~ np.logical_or(validation_idxs, holdout_idxs)
 
-        train_intervals = [intervals[k][train_idxs]
-                           for k in ['chrom', 'start', 'end']]
-        valid_intervals = [intervals[k][validation_idxs]
-                           for k in ['chrom', 'start', 'end']]
+            train_intervals = [intervals[k][train_idxs]
+                               for k in ['chrom', 'start', 'end']]
+            valid_intervals = [intervals[k][validation_idxs]
+                               for k in ['chrom', 'start', 'end']]
 
-        datafiles = dataset['inputs']
-        labels = None
-        train_labels = None
-        valid_labels = None
-        if 'labels' in dataset.keys():
-            labels = dataset['labels']
-            train_labels = labels[train_idxs]
-            valid_labels = labels[validation_idxs]
+            datafiles = dataset['inputs']
+            labels = None
+            train_labels = None
+            valid_labels = None
+            if 'labels' in dataset.keys():
+                labels = dataset['labels']
+                train_labels = labels[train_idxs]
+                valid_labels = labels[validation_idxs]
 
-        train_examples_queues[dataset_id] = get_readers_for_dataset(
-            train_intervals, datafiles, train_labels, name='{}-training'.format(dataset_id))
-        valid_examples_queues[dataset_id] = get_readers_for_dataset(
-            valid_intervals, datafiles, valid_labels, name='{}-validation'.format(dataset_id))
+            train_examples_queues[dataset_id] = get_readers_for_dataset(
+                train_intervals, datafiles, train_labels, name='{}-training'.format(dataset_id))
+            valid_examples_queues[dataset_id] = get_readers_for_dataset(
+                valid_intervals, datafiles, valid_labels, name='{}-validation'.format(dataset_id))
 
     return train_examples_queues, valid_examples_queues, task_names
 

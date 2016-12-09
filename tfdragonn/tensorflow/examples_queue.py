@@ -7,13 +7,13 @@ from collections import OrderedDict
 import tensorflow as tf
 
 """
-A queue for storing intervals and labels.
+A queue for storing intervals and optionally labels.
 """
 
 _DEFAULT_BUFFER_CAPACITY = 10000
 
 
-def examples_queue(intervals, data, labels, name='examples-queue'):
+def examples_queue(intervals, data, labels=None, name='examples-queue'):
     """Create an examples queue to store extracted examples.
 
     Args:
@@ -21,24 +21,21 @@ def examples_queue(intervals, data, labels, name='examples-queue'):
             1) intervals encoded as 'chrom': (string), 'start': (int), and 'stop': (int), or
             2) intervals encoded as 'bed3': (string) TSV entries
         data: a dict of tensors with first dimension N.
-        labels: a dict of tensors, each with first dimension N.
+        labels: (optional) a tensor with dimensions N X T.
         name: (optional) string, name for this queue
     Returns:
         a queue reference
     """
-    tensors_to_enqueue = OrderedDict
+    tensors_to_enqueue = OrderedDict()
 
     for k, v in intervals.items():
-        assert k not in tensors_to_enqueue
         tensors_to_enqueue['intervals/{}'.format(k)] = v
 
     for k, v in data.items():
-        assert k not in tensors_to_enqueue
         tensors_to_enqueue['data/{}'.format(k)] = v
 
-    for k, v in labels.items():
-        assert k not in tensors_to_enqueue
-        tensors_to_enqueue['labels/'.format(k)] = v
+    if labels is not None:
+        tensors_to_enqueue['labels'] = labels
 
     shapes = [t.get_shape()[1:] for t in tensors_to_enqueue.values()]
     dtypes = [t.dtype for t in tensors_to_enqueue.values()]
@@ -47,7 +44,7 @@ def examples_queue(intervals, data, labels, name='examples-queue'):
     with tf.variable_scope(name):
         queue = tf.FIFOQueue(capacity=_DEFAULT_BUFFER_CAPACITY, dtypes=dtypes, shapes=shapes,
                              names=names, name='examples-queue')
-        enqueue_op = queue.enqueue(tensors_to_enqueue)
+        enqueue_op = queue.enqueue_many(tensors_to_enqueue)
         queue_runner = tf.train.QueueRunner(
             queue=queue, enqueue_ops=[enqueue_op], close_op=queue.close(),
             cancel_op=queue.close(cancel_pending_enqueues=True))

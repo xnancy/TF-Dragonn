@@ -1,0 +1,6 @@
+{
+    "A549": {
+        "dnase_data_dir": "/srv/scratch/jisraeli/bcolz_data/DNASE.A549.fc.signal.bigwig", 
+        "genome_data_dir": "/srv/scratch/jisraeli/bcolz_data/hg19.genome.fa"
+    }
+}

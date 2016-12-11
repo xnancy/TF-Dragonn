@@ -209,3 +209,7 @@ class Array2D(object):
     @property
     def ndim(self):
         return self._arr.ndim
+    
+    def copy(self):
+        self._arr = self._arr.copy()
+        return self

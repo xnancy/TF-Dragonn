@@ -65,7 +65,7 @@ class ClassiferTrainer(object):
             binary_labels = tf.equal(labels, 1)
         return binary_labels
 
-    def metrics_by_task(self, logits, labels, weights, task_names, prefix='train-by-TF'):
+    def metrics_by_task(self, logits, labels, weights, task_names, prefix='train-eval-by-TF'):
         with tf.variable_scope('metrics_by_task'):
             tasknames_to_metrics = {}
             for i, task_name in enumerate(task_names):
@@ -75,12 +75,11 @@ class ClassiferTrainer(object):
                 t_prefix = '{}-{}'.format(prefix, task_name)
                 tasknames_to_metrics[task_name] = self.get_merged_metrics(
                     t_logits, t_labels, t_weights, prefix=t_prefix)
-            for task_name, (names_to_values, _) in tasknames_to_metrics.items():
-                for metric_name, metric_value in names_to_values.items():
-                    tf.summary.scalar(metric_name, metric_value)
+            for task_name, (_, names_to_updates) in tasknames_to_metrics.items():
+                self.get_summaries_for_metrics(names_to_updates)
 
     def metrics_by_dataset(self, logits, labels, weights, dataset_idxs, dataset_names,
-                           prefix='train-by-celltype'):
+                           prefix='train-eval-by-celltype'):
         with tf.variable_scope('metrics_by_dataset'):
             datasetnames_to_metrics = {}
             for i, dataset_name in enumerate(dataset_names):
@@ -91,9 +90,8 @@ class ClassiferTrainer(object):
                 d_prefix = '{}-{}'.format(prefix, dataset_name)
                 datasetnames_to_metrics[dataset_name] = self.get_merged_metrics(
                     logits, labels, d_weights, prefix=d_prefix)
-            for dataset_name, (names_to_values, _) in datasetnames_to_metrics.items():
-                for metric_name, metric_value in names_to_values.items():
-                    tf.summary.scalar(metric_name, metric_value)
+            for dataset_name, (_, names_to_updates) in datasetnames_to_metrics.items():
+                self.get_summaries_for_metrics(names_to_updates)
 
     def get_merged_metrics(self, logits, labels, weights, prefix='train-eval'):
         """Returns `names_to_values` and `names_to_updates` dicts."""
@@ -133,11 +131,11 @@ class ClassiferTrainer(object):
     def get_loss(self, logits, labels, weights):
         sigmoid_xentropy_loss = slim.losses.sigmoid_cross_entropy(
             logits, labels, weights=weights)
-        tf.scalar_summary('simoid-xentropy-loss', sigmoid_xentropy_loss)
+        tf.scalar_summary('loss/simoid-xentropy-loss', sigmoid_xentropy_loss)
 
         # this adds regularization if it's specified
         total_loss = slim.losses.get_total_loss()
-        tf.scalar_summary('total-loss', total_loss)
+        tf.scalar_summary('loss/total-loss', total_loss)
 
         return total_loss
 
@@ -181,5 +179,5 @@ class ClassiferTrainer(object):
 
         # TODO(cprobert): implement early stopping?
         slim.learning.train(
-            train_op, log_dir, number_of_steps=total_steps, save_summaries_secs=10,
-            trace_every_n_steps=1000)
+            train_op, log_dir, number_of_steps=total_steps, save_summaries_secs=60,
+            trace_every_n_steps=1000, save_interval_secs=120)

@@ -10,7 +10,7 @@ import tensorflow as tf
 A queue for storing intervals and optionally labels.
 """
 
-_DEFAULT_BUFFER_CAPACITY = 10000
+_DEFAULT_BUFFER_CAPACITY = 50000
 
 
 def examples_queue(intervals, data, labels=None, name='examples-queue'):

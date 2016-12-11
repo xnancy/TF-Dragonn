@@ -8,7 +8,7 @@ import tensorflow as tf
 class SharedExamplesQueue(object):
     """A container for a shared examples queue and metadata."""
 
-    def __init__(self, readers, task_names, batch_size=128, shuffle=True, capacity=5000,
+    def __init__(self, readers, task_names, batch_size=128, shuffle=True, capacity=50000,
                  name='shared-examples-queue'):
         """Construct a shared examples queue for a dict of readers.
 

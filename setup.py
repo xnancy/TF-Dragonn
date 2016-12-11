@@ -4,7 +4,7 @@ config = {
     'include_package_data': True,
     'description': 'TF modeling with Deep RegulAtory GenOmic Neural Networks (TF-DragoNN)',
     'download_url': 'https://github.com/kundajelab/tf-dragonn',
-    'version': '0.1.0',
+    'version': '0.1.1',
     'packages': ['tfdragonn'],
     'setup_requires': [],
     'install_requires': ['numpy>=1.9', 'keras==0.3.2', 'deeplift', 'joblib', 'sklearn', 'future', 'psutil', 'pybedtools'],

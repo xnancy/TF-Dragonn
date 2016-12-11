@@ -1,0 +1,21 @@
+{
+    "HeLa-S3": {
+        "regions": "/users/jisraeli/src/tf-dragonn/examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.HeLa-S3.intervals.bed", 
+        "labels": "/users/jisraeli/src/tf-dragonn/examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.HeLa-S3.labels.npy"
+    }, 
+    "K562": {
+        "regions": "/users/jisraeli/src/tf-dragonn/examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.K562.intervals.bed", 
+        "labels": "/users/jisraeli/src/tf-dragonn/examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.K562.labels.npy"
+    }, 
+    "MCF-7": {
+        "regions": "/users/jisraeli/src/tf-dragonn/examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.MCF-7.intervals.bed", 
+        "labels": "/users/jisraeli/src/tf-dragonn/examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.MCF-7.labels.npy"
+    }, 
+    "task_names": [
+        "MYC"
+    ], 
+    "A549": {
+        "regions": "/users/jisraeli/src/tf-dragonn/examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.A549.intervals.bed", 
+        "labels": "/users/jisraeli/src/tf-dragonn/examples/label_regions/myc_conservative_dnase_regions_and_labels_stride200_flank400.A549.labels.npy"
+    }
+}

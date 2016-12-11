@@ -1,0 +1,11 @@
+{
+    "A549": {
+	"genome_fasta": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.genome.fa",
+	"dnase_bigwig": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/DNASE/fold_coverage_wiggles/DNASE.A549.fc.signal.bigwig",
+	"dnase_peaks_bed": {
+	    "region_bed": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/DNASE/peaks/conservative/DNASE.A549.conservative.narrowPeak.gz",
+	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes",
+	    "count_within_distances": [1e6]
+	}
+    }
+}

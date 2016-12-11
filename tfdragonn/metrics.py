@@ -57,6 +57,8 @@ class ClassificationResult(object):
                     task_labels, task_predictions, 0.9)),
                 ('Recall at 25% FDR', recall_at_precision_threshold(
                     task_labels, task_predictions, 0.75)),
+                ('Recall at 50% FDR', recall_at_precision_threshold(
+                    task_labels, task_predictions, 0.5)),
                 ('Num Positives', task_labels.sum()),
                 ('Num Negatives', (1 - task_labels).sum())
             )))
@@ -67,7 +69,7 @@ class ClassificationResult(object):
         return '\n'.join(
             '{}Balanced Accuracy: {:.2f}%\t'
             'auROC: {:.3f}\t auPRC: {:.3f}\n'
-            'Recall at 5% | 10% | 25% FDR: {:.1f}% | {:.1f}% | {:.1f}%\t'
+            'Recall at 5% | 10% | 25% | 50% FDR: {:.1f}% | {:.1f}% | {:.1f}% | {:.1f}%\t'
             'Num Positives: {}\t Num Negatives: {}\n'.format(
                 '{}: '.format('Task {}'.format(
                     self.task_names[task_index]

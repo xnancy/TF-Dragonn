@@ -21,7 +21,7 @@ TRAINING_SUMMARIES = ['TRAINING_SUMMARIES']
 class ClassiferTrainer(object):
 
     def __init__(self, model, optimizer=tf.train.AdamOptimizer, lr=0.0003,
-                 early_stopping_metric='auPRC', num_epochs=100, batch_size=32, epoch_size=250000,
+                 early_stopping_metric='auPRC', num_epochs=10000, batch_size=32, epoch_size=250000,
                  early_stopping_patience=5, save_best_model_to_prefix=None):
         assert isinstance(model, Classifier)
 
@@ -131,11 +131,11 @@ class ClassiferTrainer(object):
     def get_loss(self, logits, labels, weights):
         sigmoid_xentropy_loss = slim.losses.sigmoid_cross_entropy(
             logits, labels, weights=weights)
-        tf.scalar_summary('loss/simoid-xentropy-loss', sigmoid_xentropy_loss)
+        tf.summary.scalar('loss/simoid-xentropy-loss', sigmoid_xentropy_loss)
 
         # this adds regularization if it's specified
         total_loss = slim.losses.get_total_loss()
-        tf.scalar_summary('loss/total-loss', total_loss)
+        tf.summary.scalar('loss/total-loss', total_loss)
 
         return total_loss
 
@@ -179,5 +179,5 @@ class ClassiferTrainer(object):
 
         # TODO(cprobert): implement early stopping?
         slim.learning.train(
-            train_op, log_dir, number_of_steps=total_steps, save_summaries_secs=60,
+            train_op, log_dir, number_of_steps=total_steps, save_summaries_secs=10,
             trace_every_n_steps=1000, save_interval_secs=120)

@@ -21,7 +21,7 @@ TRAINING_SUMMARIES = ['TRAINING_SUMMARIES']
 class ClassiferTrainer(object):
 
     def __init__(self, model, optimizer=tf.train.AdamOptimizer, lr=0.0003,
-                 early_stopping_metric='auPRC', num_epochs=100, batch_size=32, epoch_size=250000,
+                 early_stopping_metric='auPRC', num_epochs=10000, batch_size=32, epoch_size=250000,
                  early_stopping_patience=5, save_best_model_to_prefix=None):
         assert isinstance(model, Classifier)
 
@@ -84,8 +84,8 @@ class ClassiferTrainer(object):
             datasetnames_to_metrics = {}
             for i, dataset_name in enumerate(dataset_names):
                 d_mask = tf.where(tf.equal(dataset_idxs, i),
-                                  tf.zeros_like(labels, dtype=tf.float32),
-                                  tf.ones_like(labels, dtype=tf.float32))
+                                  tf.ones_like(labels, dtype=tf.float32),
+                                  tf.zeros_like(labels, dtype=tf.float32))
                 d_weights = tf.multiply(d_mask, weights)
                 d_prefix = '{}-{}'.format(prefix, dataset_name)
                 datasetnames_to_metrics[dataset_name] = self.get_merged_metrics(
@@ -131,11 +131,11 @@ class ClassiferTrainer(object):
     def get_loss(self, logits, labels, weights):
         sigmoid_xentropy_loss = slim.losses.sigmoid_cross_entropy(
             logits, labels, weights=weights)
-        tf.scalar_summary('loss/simoid-xentropy-loss', sigmoid_xentropy_loss)
+        tf.summary.scalar('loss/simoid-xentropy-loss', sigmoid_xentropy_loss)
 
         # this adds regularization if it's specified
         total_loss = slim.losses.get_total_loss()
-        tf.scalar_summary('loss/total-loss', total_loss)
+        tf.summary.scalar('loss/total-loss', total_loss)
 
         return total_loss
 
@@ -161,7 +161,7 @@ class ClassiferTrainer(object):
         # decide which ones to calculate at training / evaluation time?
         names_to_values, names_to_updates = self.get_merged_metrics(
             logits, labels, weights, prefix='train-eval')
-        metrics_summary_ops = self.get_summaries_for_metrics(names_to_values)
+        metrics_summary_ops = self.get_summaries_for_metrics(names_to_updates)
         self.metrics_by_task(logits, labels, weights, task_names)
         self.metrics_by_dataset(logits, labels, weights,
                                 dataset_idxs, dataset_names)
@@ -179,5 +179,5 @@ class ClassiferTrainer(object):
 
         # TODO(cprobert): implement early stopping?
         slim.learning.train(
-            train_op, log_dir, number_of_steps=total_steps, save_summaries_secs=60,
+            train_op, log_dir, number_of_steps=total_steps, save_summaries_secs=10,
             trace_every_n_steps=1000, save_interval_secs=120)

@@ -147,9 +147,11 @@ def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-rea
         # Create a reader for each datafile
         read_values = {}
         for k, datafile in datafiles.items():
-            norm_params = 'local_zscore' if k == 'dnase_data_dir' else None
+            reader_kwargs = {}
+            reader_kwargs['norm_params'] = 'local_zscore' if k == 'dnase_data_dir' else None
+            reader_kwargs['interval_params'] = 'midpoint' if k == 'dnase_peaks_counts_data_dir' else None
             read_values[k] = bcolz_interval_reader(
-                to_read, datafile, interval_size, norm_params, op_name='{}-reader'.format(k))
+                to_read, datafile, interval_size, op_name='{}-reader'.format(k), **reader_kwargs)
 
         # Enqueue the read values, along with labels and intervals
         interval_tensor_dict = {k: to_read[k]

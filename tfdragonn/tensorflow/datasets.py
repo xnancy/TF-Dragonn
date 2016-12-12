@@ -22,7 +22,8 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
         if 'genome_data_dir' in cur_dataset_dict:
             all_datasets[cur_dataset_id][
                 'genome_data_dir'] = cur_dataset_dict['genome_data_dir']
-        if 'dnase_bed_counts_data_dir' in cur_dataset_dict:
+        if ('dnase_peaks_counts' in cur_dataset_dict or ## account for temporary naming conventions
+            'dnase_peaks_counts_data_dir' in cur_dataset_dict):
             all_datasets[cur_dataset_id][
                 'dnase_peaks_counts_data_dir'] = cur_dataset_dict['dnase_peaks_counts_data_dir']
 
@@ -52,7 +53,10 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
     return dataset
 
 
-RAW_INPUT_NAMES = ['genome_fasta', 'dnase_bigwig', 'dnase_peaks_bed']
+RAW_INPUT_NAMES = set(['genome_fasta', 'dnase_bigwig', 'dnase_peaks_bed'])
+raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
+                             'dnase_bigwig': 'dnase_data_dir',
+                             'dnase_peaks_bed': 'dnase_peaks_counts_data_dir'}
 
 
 def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
@@ -62,13 +66,18 @@ def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
         datasets = json.load(fp, object_pairs_hook=OrderedDict)
     # populate missing input types with None
     for dataset_id, dataset_dict in datasets.items():
+        if not set(dataset_dict.keys()).issubset(RAW_INPUT_NAMES):
+            err_msg = """ {} in {} has an unexpected input name!
+                          Supported input names are {}""".format(
+                              dataset_id, raw_inputs_file, RAW_INPUT_NAMES)
+            raise ValueError(err_msg)
         for input_name in RAW_INPUT_NAMES:
             if input_name not in dataset_dict:
                 datasets[dataset_id][input_name] = None
     if require_consistentcy and len(datasets) > 1:
         # check which inputs are in the first dataset
         input_id2is_none = {input_id: input_val is None
-                             for input_id, input_val in datasets.values()[0].items()}
+                            for input_id, input_val in datasets.values()[0].items()}
         # check other datasets match it
         for dataset_id, dataset_dict in datasets.items():
             for input_id, input_val in dataset_dict.items():

@@ -67,7 +67,8 @@ def bcolz_interval_reader(intervals, data_directory, interval_size=1000, norm_pa
                 mean, var = tf.nn.moments(read_values, [1], keep_dims=True)
                 std = tf.maximum(tf.abs(tf.sqrt(var)), 0.0001)
                 read_values = (read_values - mean) / std
-                read_values = tf.verify_tensor_all_finite(read_values, "non-finite values!")
+                read_values = tf.verify_tensor_all_finite(
+                    read_values, "non-finite values!")
 
         return read_values
 
@@ -173,13 +174,16 @@ def _load_directory(base_dir, in_memory, use_cache):
                 raise ValueError('Inconsistent shape found in metadata file: '
                                  '{} - {} vs {}'.format(chrom, shape,
                                                         data[chrom].shape))
-    elif metadata['type'] == 'vplot_bcolz':
-        if in_memory:
-            raise IOError('In-memory extractors not supported for v-plots.')
-        data = {chrom: BcolzVplot(os.path.join(base_dir, chrom), mode='r')
+    elif metadata['type'] in {'vplot_bcolz', 'array_2D_transpose_bcolz'}:
+        data = {chrom: Array2D(os.path.join(base_dir, chrom), mode='r')
                 for chrom in next(os.walk(base_dir))[1]}
+        for chrom, shape in metadata['file_shapes'].iteritems():
+            if data[chrom].shape != tuple(shape):
+                raise ValueError('Inconsistent shape found in metadata file: '
+                                 '{} - {} vs {}'.format(chrom, shape,
+                                                        data[chrom].shape))
     else:
-        raise IOError('Only bcolz arrays and bcolz vplots are supported.')
+        raise IOError('Only bcolz arrays are supported.')
 
     if in_memory:
         data = {k: data[k].copy() for k in data.keys()}
@@ -191,8 +195,8 @@ def _load_directory(base_dir, in_memory, use_cache):
     return data
 
 
-class BcolzVplot(object):
-    """Representation for bcolz v-plot (since we want row-major storage)."""
+class Array2D(object):
+    """Representation for 2D arrays (we want row-major storage)."""
 
     def __init__(self, rootdir, mode='r'):
         self._arr = bcolz.open(rootdir, mode=mode)
@@ -205,6 +209,14 @@ class BcolzVplot(object):
         r, c = key
         self._arr[c, r] = item
 
+    @property
     def shape(self):
-        [c, r] = self._arr.shape
-        return [r, c]
+        return self._arr.shape[::-1]
+
+    @property
+    def ndim(self):
+        return self._arr.ndim
+    
+    def copy(self):
+        self._arr = self._arr.copy()
+        return self

@@ -21,7 +21,7 @@ TRAINING_SUMMARIES = ['TRAINING_SUMMARIES']
 class ClassiferTrainer(object):
 
     def __init__(self, model, optimizer=tf.train.AdamOptimizer, lr=0.0003,
-                 early_stopping_metric='auPRC', num_epochs=10000, batch_size=32, epoch_size=250000,
+                 early_stopping_metric='auPRC', num_epochs=100, epoch_size=250000,
                  early_stopping_patience=5, save_best_model_to_prefix=None):
         assert isinstance(model, Classifier)
 
@@ -30,7 +30,6 @@ class ClassiferTrainer(object):
         self.lr = lr
         self.early_stopping_metric = early_stopping_metric
         self.num_epochs = num_epochs
-        self.batch_size = batch_size
         self.epoch_size = epoch_size
         self.early_stopping_patience = early_stopping_patience
         self.save_best_model_to_prefix = save_best_model_to_prefix
@@ -98,23 +97,32 @@ class ClassiferTrainer(object):
         preds, binary_preds = self.get_preds_and_binary_preds(logits)
         binary_labels = self.get_binary_labels(labels)
 
+          # Weirdly, it looks like Recall/Precision expect bools encoded as ints
+        binary_preds_ints = tf.cast(binary_preds, tf.int32)
+        binary_labels_ints = tf.cast(binary_labels, tf.int32)
+
         names_to_metrics = {
             '{}/Accuracy'.format(prefix): tf.contrib.metrics.streaming_accuracy(
                 binary_preds, binary_labels, weights=weights),
             '{}/Recall'.format(prefix): tf.contrib.metrics.streaming_recall(
-                preds, labels, weights=weights),
+                binary_preds_ints, binary_labels_ints, weights=weights),
             '{}/Precision'.format(prefix): tf.contrib.metrics.streaming_precision(
-                preds, labels, weights=weights),
+                binary_preds_ints, binary_labels_ints, weights=weights),
             '{}/auROC'.format(prefix): tf.contrib.metrics.streaming_auc(
                 preds, labels, weights=weights, curve='ROC', name='auROC'),
             '{}/auPRC'.format(prefix): tf.contrib.metrics.streaming_auc(
                 preds, labels, weights=weights, curve='PR', name='auPRC'),
+            '{}/label-balance'.format(prefix): tf.contrib.metrics.streaming_mean(
+                labels, weights=weights, name='label-balance'),
         }
 
         for specificity in [0.01, 0.05, 0.1, 0.25]:
             name = '{0}/sensty_at_{1:.2f}_specfty'.format(prefix, specificity)
             names_to_metrics[name] = tf.contrib.metrics.streaming_sensitivity_at_specificity(
                 preds, labels, specificity, weights=weights, name=name)
+
+        loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
+        names_to_metrics['{}/xentropy-loss'.format(prefix)] = (loss, loss)
 
         names_to_values, names_to_updates = slim.metrics.aggregate_metric_map(
             names_to_metrics)
@@ -149,7 +157,7 @@ class ClassiferTrainer(object):
 
         return logits, labels, loss, weights
 
-    def train(self, examples_queue, log_dir):
+    def train(self, examples_queue, log_dir, session_config=None):
         logits, labels, loss, weights = self.get_logits_labels_loss_weights(
             examples_queue)
         task_names = examples_queue.task_names
@@ -171,13 +179,14 @@ class ClassiferTrainer(object):
             loss, opt, clip_gradient_norm=2.0, summarize_gradients=True,
             colocate_gradients_with_ops=True)
 
-        total_steps = int(self.num_epochs * self.epoch_size / self.batch_size)
+        batch_size = dataset_idxs.get_shape()[0].value
+        total_steps = int(self.num_epochs * self.epoch_size / batch_size)
 
         # note: we can add other summaries here
-        summary_op = tf.summary.merge(metrics_summary_ops)
+        # summary_op = tf.summary.merge(metrics_summary_ops)
         # but aren't all our summaries already under graphkeys.summaries?
 
         # TODO(cprobert): implement early stopping?
         slim.learning.train(
             train_op, log_dir, number_of_steps=total_steps, save_summaries_secs=10,
-            trace_every_n_steps=1000, save_interval_secs=120)
+            trace_every_n_steps=1000, save_interval_secs=120, session_config=session_config)

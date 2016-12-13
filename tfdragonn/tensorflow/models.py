@@ -37,7 +37,7 @@ class SequenceAndDnaseClassifier(Classifier):
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
-                 pool_width=25, batch_norm=False):
+                 fc_layer_widths=(), pool_width=25, batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
@@ -49,6 +49,7 @@ class SequenceAndDnaseClassifier(Classifier):
         self.dnase_conv_width = dnase_conv_width
         self.num_combined_filters = num_combined_filters
         self.combined_conv_width = combined_conv_width
+        self.fc_layer_widths = fc_layer_widths
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
@@ -100,7 +101,9 @@ class SequenceAndDnaseClassifier(Classifier):
             logits = slim.avg_pool2d(logits, [1, self.pool_width], stride=[1, self.pool_width],
                                      padding='VALID', scope='avg_pool')
             logits = slim.flatten(logits, scope='flatten')
+            if len(self.fc_layer_widths) > 0:
+                logits = slim.stack(logits, slim.fully_connected, self.fc_layer_widths, scope='fc')
             logits = slim.fully_connected(
-                logits, self.num_tasks, activation_fn=None, scope='fc')
+                logits, self.num_tasks, activation_fn=None, scope='output-fc')
 
             return logits

@@ -38,13 +38,11 @@ class SharedExamplesQueue(object):
                 tensors_to_enqueue[tensor_name] = tf.stack(values)
 
             # Add the dataset names so we can evaluate per-dataset
-            tensors_to_enqueue['dataset'] = tf.convert_to_tensor(
-                self.reader_keys)
+            tensors_to_enqueue['dataset'] = tf.convert_to_tensor(self.reader_keys)
 
             # Also add the dataset indexes to make it easier to split by
             # dataset
-            tensors_to_enqueue[
-                'dataset-index'] = tf.range(len(self.reader_keys))
+            tensors_to_enqueue['dataset-index'] = tf.range(len(self.reader_keys))
 
             if shuffle:
                 min_after_dequeue = int(0.5 * capacity)

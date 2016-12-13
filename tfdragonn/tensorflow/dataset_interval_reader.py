@@ -55,7 +55,7 @@ def get_readers_and_tasks(processed_inputs_file, processed_intervals_file, name=
 
 def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_intervals_file,
                                         validation_chroms=[], holdout_chroms=[],
-                                        name='data-readers'):
+                                        name='data-readers', no_validation_queues=False):
     """Generate two reader and examples queues for train/validation of each dataset.
 
     Args:
@@ -101,10 +101,10 @@ def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_interva
             holdout_idxs = np.in1d(intervals['chrom'], holdout_chroms)
             train_idxs = ~ np.logical_or(validation_idxs, holdout_idxs)
 
-            train_intervals = [intervals[k][train_idxs]
-                               for k in ['chrom', 'start', 'end']]
-            valid_intervals = [intervals[k][validation_idxs]
-                               for k in ['chrom', 'start', 'end']]
+            train_intervals = {k: intervals[k][train_idxs]
+                               for k in ['chrom', 'start', 'end']}
+            valid_intervals = {k: intervals[k][validation_idxs]
+                               for k in ['chrom', 'start', 'end']}
 
             datafiles = dataset['inputs']
             labels = None
@@ -117,8 +117,10 @@ def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_interva
 
             train_examples_queues[dataset_id] = get_readers_for_dataset(
                 train_intervals, datafiles, train_labels, name='{}-training'.format(dataset_id))
-            valid_examples_queues[dataset_id] = get_readers_for_dataset(
-                valid_intervals, datafiles, valid_labels, name='{}-validation'.format(dataset_id))
+            if not no_validation_queues:
+                valid_examples_queues[dataset_id] = get_readers_for_dataset(
+                    valid_intervals, datafiles, valid_labels,
+                    name='{}-validation'.format(dataset_id))
 
     return train_examples_queues, valid_examples_queues, task_names
 

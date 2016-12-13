@@ -97,7 +97,7 @@ class ClassiferTrainer(object):
         preds, binary_preds = self.get_preds_and_binary_preds(logits)
         binary_labels = self.get_binary_labels(labels)
 
-          # Weirdly, it looks like Recall/Precision expect bools encoded as ints
+        # Weirdly, it looks like Recall/Precision expect bools encoded as ints
         binary_preds_ints = tf.cast(binary_preds, tf.int32)
         binary_labels_ints = tf.cast(binary_labels, tf.int32)
 
@@ -122,7 +122,8 @@ class ClassiferTrainer(object):
                 preds, labels, specificity, weights=weights, name=name)
 
         loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
-        names_to_metrics['{}/xentropy-loss'.format(prefix)] = (loss, loss)
+        loss_name = '{}/xentropy-loss'.format(prefix)
+        tf.summary.scalar(loss_name, loss)
 
         names_to_values, names_to_updates = slim.metrics.aggregate_metric_map(
             names_to_metrics)

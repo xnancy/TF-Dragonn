@@ -55,7 +55,8 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
 
 RAW_INPUT_NAMES = set(['genome_fasta', 'dnase_bigwig', 'dnase_peaks_bed',
                        'gencode_tss', 'gencode_annotation', 'gencode_polyA',
-                       'gencode_lncRNA', 'gencode_tRNA'])
+                       'gencode_lncRNA', 'gencode_tRNA',
+                       'expression_tsv'])
 raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
                              'dnase_bigwig': 'dnase_data_dir',
                              'dnase_peaks_bed': 'dnase_peaks_counts_data_dir',
@@ -63,7 +64,8 @@ raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
                              'gencode_annotation': 'gencode_annotation_distances_data_dir',
                              'gencode_polyA': 'gencode_polyA_distances_data_dir',
                              'gencode_lncRNA': 'gencode_lncRNA_distances_data_dir',
-                             'gencode_tRNA': 'gencode_tRNA_distances_data_dir'}
+                             'gencode_tRNA': 'gencode_tRNA_distances_data_dir',
+                             'expression_tsv': 'expression_data_dir'}
 
 
 def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):

@@ -26,6 +26,11 @@
 	"gencode_tRNA": {
 	    "datafile": "/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.A549.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.A549.biorep2.tsv"
 	}
     },
     "GM12878": {
@@ -55,6 +60,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.GM12878.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.GM12878.biorep2.tsv"
 	}
     },
     "H1-hESC": {
@@ -84,6 +94,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.H1-hESC.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.H1-hESC.biorep2.tsv"
 	}
     },
     "HCT116": {
@@ -113,6 +128,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.HCT116.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.HCT116.biorep2.tsv"
 	}
     },
     "HeLa-S3": {
@@ -142,6 +162,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.HeLa-S3.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.HeLa-S3.biorep2.tsv"
 	}
     },
     "HepG2": {
@@ -171,6 +196,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.HepG2.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.HepG2.biorep2.tsv"
 	}
     },
     "IMR90": {
@@ -200,6 +230,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.IMR90.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.IMR90.biorep2.tsv"
 	}
     },
     "induced_pluripotent_stem_cell": {
@@ -229,6 +264,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.induced_pluripotent_stem_cell.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.induced_pluripotent_stem_cell.biorep2.tsv"
 	}
     },
     "K562": {
@@ -258,6 +298,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.K562.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.K562.biorep2.tsv"
 	}
     },
     "liver": {
@@ -287,6 +332,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.liver.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.liver.biorep2.tsv"
 	}
     },
     "MCF-7": {
@@ -316,6 +366,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.MCF-7.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.MCF-7.biorep2.tsv"
 	}
     },
     "Panc1": {
@@ -345,6 +400,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.Panc1.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.Panc1.biorep2.tsv"
 	}
     },
     "PC-3": {
@@ -374,6 +434,11 @@
 	"gencode_tRNA":{
 	    "datafile":"/mnt/data/annotations/by_release/hg19.GRCh37/GENCODE_ann/gencodeAnno/v19/gencode.v19.tRNAs.gtf.gz",
 	    "chrom_sizes_file": "/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes"
+	},
+	"expression_tsv": {
+	    "datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.PC-3.biorep1.tsv",
+	    "components_file": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/expression_PCs/12_components_of_mean_tpms_asinh_zscore_normalized.npy",
+	    "replicate_datafile": "/mnt/lab_data/kundaje/jisraeli/projects/TF_Challenge/data/RNAseq/gene_expression.PC-3.biorep2.tsv"
 	}
     }
 }

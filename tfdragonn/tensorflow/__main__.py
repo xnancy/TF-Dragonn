@@ -16,6 +16,7 @@ from genomedatalayer.shm import (
 from tfdragonn.datasets import parse_raw_intervals_config_file
 from tfdragonn.intervals import get_tf_predictive_setup
 from tfdragonn.tensorflow.datasets import parse_raw_inputs, raw_input2processed_input
+from tfdragonn.tensorflow.extractors import extract_expression_to_file
 
 # setup logging
 log_formatter = \
@@ -35,7 +36,8 @@ input2extractor_func = {'dnase_bigwig': extract_bigwig_to_file,
                         'gencode_annotation': extract_dist_to_intervals_to_file,
                         'gencode_polyA': extract_dist_to_intervals_to_file,
                         'gencode_lncRNA': extract_dist_to_intervals_to_file,
-                        'gencode_tRNA': extract_dist_to_intervals_to_file}
+                        'gencode_tRNA': extract_dist_to_intervals_to_file,
+                        'expression_tsv': extract_expression_to_file}
 
 def parse_args():
     parser = argparse.ArgumentParser(

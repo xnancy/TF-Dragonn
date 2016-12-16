@@ -8,9 +8,20 @@ import tensorflow.contrib.slim as slim
 
 def classification_metrics(logits, labels, weights, dataset_idxs, dataset_names, task_names):
     with tf.variable_scope('metrics'):
-        create_all_metrics(logits, labels, weights, 'metrics')
-    metrics_by_task(logits, labels, weights, task_names)
-    metrics_by_dataset(logits, labels, weights, dataset_idxs, dataset_names)
+        names2values, names2updates = create_all_metrics(
+            logits, labels, weights, 'metrics')
+    task_names2values, task_names2updates = metrics_by_task(
+        logits, labels, weights, task_names)
+    dset_names2values, dset_names2updates = metrics_by_dataset(
+        logits, labels, weights, dataset_idxs, dataset_names)
+
+    names2values.update(task_names2values)
+    names2values.update(dset_names2values)
+
+    names2updates.update(task_names2updates)
+    names2updates.update(dset_names2updates)
+
+    return names2values, names2updates
 
 
 def metrics_by_task(self, logits, labels, weights, task_names, prefix='TF'):
@@ -39,11 +50,7 @@ def create_all_metrics(logits, labels, weights, prefix):
     """Create summaries for all metrics for a given set of logits/labels/weights."""
     names_to_values, names_to_updates = get_merged_classification_metrics(
         logits, labels, weights, prefix)
-    other_names_to_updates = get_additional_metrics(logits, labels, weights, prefix)
-    for metric_key, metric_update in other_names_to_updates.items():
-        names_to_updates[metric_key] = metric_update
-        names_to_values[metric_key] = metric_update
-    register_summaries_for_metrics(names_to_updates)
+    register_summaries_for_metrics(names_to_values)
     return names_to_values, names_to_updates
 
 
@@ -58,23 +65,27 @@ def get_merged_classification_metrics(logits, labels, weights, prefix):
     binary_labels_ints = tf.cast(binary_labels, tf.int32)
 
     names_to_metrics = {
-        '{}/Accuracy'.format(prefix): tf.contrib.metrics.streaming_accuracy(
+        '{}/Accuracy'.format(prefix): slim.metrics.streaming_accuracy(
             binary_preds, binary_labels, weights=weights),
-        '{}/Recall'.format(prefix): tf.contrib.metrics.streaming_recall(
+        '{}/Recall'.format(prefix): slim.metrics.streaming_recall(
             binary_preds_ints, binary_labels_ints, weights=weights),
-        '{}/Precision'.format(prefix): tf.contrib.metrics.streaming_precision(
+        '{}/Precision'.format(prefix): slim.metrics.streaming_precision(
             binary_preds_ints, binary_labels_ints, weights=weights),
-        '{}/auROC'.format(prefix): tf.contrib.metrics.streaming_auc(
+        '{}/auROC'.format(prefix): slim.metrics.streaming_auc(
             preds, labels, weights=weights, curve='ROC', name='auROC'),
-        '{}/auPRC'.format(prefix): tf.contrib.metrics.streaming_auc(
+        '{}/auPRC'.format(prefix): slim.metrics.streaming_auc(
             preds, labels, weights=weights, curve='PR', name='auPRC'),
-        '{}/label-balance'.format(prefix): tf.contrib.metrics.streaming_mean(
+        '{}/label-balance'.format(prefix): slim.metrics.streaming_mean(
             labels, weights=weights, name='label-balance'),
     }
 
+    loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
+    loss_name = '{}/xentropy-loss'.format(prefix)
+    names_to_metrics[loss_name] = slim.metrics.streaming_mean(loss, name='xentropy-loss')
+
     for specificity in [0.01, 0.05, 0.1, 0.25]:
         name = '{0}/sensitivity_at_{1:.2f}_specfty'.format(prefix, specificity)
-        names_to_metrics[name] = tf.contrib.metrics.streaming_sensitivity_at_specificity(
+        names_to_metrics[name] = slim.metrics.streaming_sensitivity_at_specificity(
             preds, labels, specificity, weights=weights, name=name)
 
     # TODO(cprobert): add recall-at-K metrics
@@ -85,17 +96,6 @@ def get_merged_classification_metrics(logits, labels, weights, prefix):
     return names_to_values, names_to_updates
 
 
-def get_additional_metrics(logits, labels, weights, prefix):
-    """Some metrics aren't avalible as tf-slim metrics."""
-    names_to_updates = {}
-
-    loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
-    loss_name = '{}/xentropy-loss'.format(prefix)
-    names_to_updates[loss_name] = loss
-
-    return names_to_updates
-
-
-def register_summaries_for_metrics(names_to_updates):
-    for metric_name, metric_update in names_to_updates.items():
+def register_summaries_for_metrics(names_to_values):
+    for metric_name, metric_update in names_to_values.items():
         tf.summary.scalar(metric_name, metric_update, description=metric_name)

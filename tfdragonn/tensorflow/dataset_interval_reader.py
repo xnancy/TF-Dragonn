@@ -101,6 +101,11 @@ def get_train_readers_and_tasknames(processed_inputs_file, processed_intervals_f
             train_intervals = {k: intervals[k][train_idxs]
                                for k in ['chrom', 'start', 'end']}
 
+            print('Num train intervals: {}'.format(train_idxs.shape[0]))
+            print('Num validation intervals: {}'.format(
+                validation_idxs.shape[0]))
+            print('Num holdout intervals: {}'.format(holdout_idxs.shape[0]))
+
             datafiles = dataset['inputs']
             labels = None
             train_labels = None

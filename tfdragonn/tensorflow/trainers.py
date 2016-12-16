@@ -74,21 +74,18 @@ class ClassiferTrainer(object):
         dataset_names = examples_queue.dataset_labels
         dataset_idxs = examples_queue.outputs['dataset-index']
 
-        classification_metrics(logits, labels, weights, dataset_idxs, dataset_names, task_names)
+        names_to_values, names_to_updates = classification_metrics(
+            logits, labels, weights, dataset_idxs, dataset_names, task_names)
 
         opt = self.optimizer(self.lr)
         train_op = slim.learning.create_train_op(
             loss, opt, clip_gradient_norm=2.0, summarize_gradients=True,
-            colocate_gradients_with_ops=True)
+            colocate_gradients_with_ops=True, update_ops=names_to_updates.values())
 
         batch_size = dataset_idxs.get_shape()[0].value
         total_steps = int(self.num_epochs * self.epoch_size / batch_size)
 
-        # note: we can add other summaries here
-        # summary_op = tf.summary.merge(metrics_summary_ops)
-        # but aren't all our summaries already under graphkeys.summaries?
-
-        # TODO(cprobert): implement early stopping?
+        # TODO(cprobert): implement early stopping
         slim.learning.train(
             train_op, train_log_dir, number_of_steps=total_steps, save_summaries_secs=10,
             trace_every_n_steps=1000, save_interval_secs=120, session_config=session_config,
@@ -106,8 +103,12 @@ class ClassiferTrainer(object):
         dataset_names = examples_queue.dataset_labels
         dataset_idxs = examples_queue.outputs['dataset-index']
 
-        classification_metrics(logits, labels, weights, dataset_idxs, dataset_names, task_names)
+        names_to_values, names_to_updates = classification_metrics(
+            logits, labels, weights, dataset_idxs, dataset_names, task_names)
 
-        slim.evaluation.evaluate_once(
+        eval_results = slim.evaluation.evaluate_once(
             master='', checkpoint_path=checkpoint, logdir=valid_log_dir, num_evals=EVAL_MAX_EVALS,
-            eval_op=None, session_config=session_config)
+            eval_op=names_to_updates.values(), session_config=session_config,
+            final_op=names_to_values.values())
+
+        print(eval_results)

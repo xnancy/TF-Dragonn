@@ -125,6 +125,17 @@ def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_interva
     return train_examples_queues, valid_examples_queues, task_names
 
 
+input_id2reader_kwargs = defaultdict(dict)
+input_id2reader_kwargs['dnase_data_dir'] = {'norm_params': 'local_zscore'}
+midpoint_inputs = ['dnase_peaks_counts_data_dir',
+                   'gencode_tss_distances_data_dir',
+                   'gencode_annotation_distances_data_dir',
+                   'gencode_polyA_distances_data_dir',
+                   'gencode_lncRNA_distances_data_dir']
+for input_id in midpoint_inputs:
+    input_id2reader_kwargs[input_id] = {'interval_params': 'midpoint'}
+
+
 def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-reader',
                             read_batch_size=128):
     """Create an input pipeline for one dataset.
@@ -149,9 +160,12 @@ def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-rea
         # Create a reader for each datafile
         read_values = {}
         for k, datafile in datafiles.items():
-            reader_kwargs = {}
-            reader_kwargs['norm_params'] = 'local_zscore' if k == 'dnase_data_dir' else None
-            reader_kwargs['interval_params'] = 'midpoint' if k == 'dnase_peaks_counts_data_dir' else None
+            if k == 'expression_data_dir': ## TODO: implement reader for expression
+                continue
+            reader_kwargs = input_id2reader_kwargs[k]
+            #reader_kwargs = {}
+            #reader_kwargs['norm_params'] = 'local_zscore' if k == 'dnase_data_dir' else None
+            #reader_kwargs['interval_params'] = 'midpoint' if k == 'dnase_peaks_counts_data_dir' else None
             read_values[k] = bcolz_interval_reader(
                 to_read, datafile, interval_size, op_name='{}-reader'.format(k), **reader_kwargs)
 

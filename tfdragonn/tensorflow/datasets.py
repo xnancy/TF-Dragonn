@@ -8,6 +8,22 @@ import json
 import numpy as np
 from pybedtools import BedTool
 
+RAW_INPUT_NAMES = set(['genome_fasta', 'dnase_bigwig', 'dnase_peaks_bed',
+                       'gencode_tss', 'gencode_annotation', 'gencode_polyA',
+                       'gencode_lncRNA', 'gencode_tRNA',
+                       'expression_tsv'])
+raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
+                             'dnase_bigwig': 'dnase_data_dir',
+                             'dnase_peaks_bed': 'dnase_peaks_counts_data_dir',
+                             'gencode_tss': 'gencode_tss_distances_data_dir',
+                             'gencode_annotation': 'gencode_annotation_distances_data_dir',
+                             'gencode_polyA': 'gencode_polyA_distances_data_dir',
+                             'gencode_lncRNA': 'gencode_lncRNA_distances_data_dir',
+                             'gencode_tRNA': 'gencode_tRNA_distances_data_dir',
+                             'expression_tsv': 'expression_data_dir'}
+PROCESSED_INPUT_NAMES = set(raw_input2processed_input.values())
+
+
 def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
     """Parse the processed inputs and intervals files, return a dataset dictionary."""
 
@@ -16,6 +32,10 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
         data = json.load(fp)
     for cur_dataset_id, cur_dataset_dict in data.items():
         all_datasets[cur_dataset_id] = {}
+        for input_id in PROCESSED_INPUT_NAMES:
+            if input_id in cur_dataset_dict:
+                all_datasets[cur_dataset_id][input_id] = cur_dataset_dict[input_id]
+        """
         if 'dnase_data_dir' in cur_dataset_dict:
             all_datasets[cur_dataset_id][
                 'dnase_data_dir'] = cur_dataset_dict['dnase_data_dir']
@@ -26,6 +46,7 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
             'dnase_peaks_counts_data_dir' in cur_dataset_dict):
             all_datasets[cur_dataset_id][
                 'dnase_peaks_counts_data_dir'] = cur_dataset_dict['dnase_peaks_counts_data_dir']
+        """
 
     dataset = {}
 
@@ -51,21 +72,6 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
         dataset[dataset_id]['intervals'] = intervals_dict
 
     return dataset
-
-
-RAW_INPUT_NAMES = set(['genome_fasta', 'dnase_bigwig', 'dnase_peaks_bed',
-                       'gencode_tss', 'gencode_annotation', 'gencode_polyA',
-                       'gencode_lncRNA', 'gencode_tRNA',
-                       'expression_tsv'])
-raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
-                             'dnase_bigwig': 'dnase_data_dir',
-                             'dnase_peaks_bed': 'dnase_peaks_counts_data_dir',
-                             'gencode_tss': 'gencode_tss_distances_data_dir',
-                             'gencode_annotation': 'gencode_annotation_distances_data_dir',
-                             'gencode_polyA': 'gencode_polyA_distances_data_dir',
-                             'gencode_lncRNA': 'gencode_lncRNA_distances_data_dir',
-                             'gencode_tRNA': 'gencode_tRNA_distances_data_dir',
-                             'expression_tsv': 'expression_data_dir'}
 
 
 def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):

@@ -9,12 +9,14 @@ import numpy as np
 import os
 
 from genomedatalayer.shm import (
-    extract_fasta_to_file, extract_bigwig_to_file, extract_bed_counts_to_file
+    extract_fasta_to_file, extract_bigwig_to_file,
+    extract_bed_counts_to_file, extract_dist_to_intervals_to_file
 )
 
 from tfdragonn.datasets import parse_raw_intervals_config_file
 from tfdragonn.intervals import get_tf_predictive_setup
 from tfdragonn.tensorflow.datasets import parse_raw_inputs, raw_input2processed_input
+from tfdragonn.tensorflow.extractors import extract_expression_to_file
 
 # setup logging
 log_formatter = \
@@ -29,7 +31,13 @@ logger.propagate = False
 
 input2extractor_func = {'dnase_bigwig': extract_bigwig_to_file,
                         'genome_fasta': extract_fasta_to_file,
-                        'dnase_peaks_bed': extract_bed_counts_to_file}
+                        'dnase_peaks_bed': extract_bed_counts_to_file,
+                        'gencode_tss': extract_dist_to_intervals_to_file,
+                        'gencode_annotation': extract_dist_to_intervals_to_file,
+                        'gencode_polyA': extract_dist_to_intervals_to_file,
+                        'gencode_lncRNA': extract_dist_to_intervals_to_file,
+                        'gencode_tRNA': extract_dist_to_intervals_to_file,
+                        'expression_tsv': extract_expression_to_file}
 
 def parse_args():
     parser = argparse.ArgumentParser(

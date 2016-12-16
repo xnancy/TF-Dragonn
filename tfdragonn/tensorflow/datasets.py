@@ -47,7 +47,6 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
             all_datasets[cur_dataset_id][
                 'dnase_peaks_counts_data_dir'] = cur_dataset_dict['dnase_peaks_counts_data_dir']
         """
-
     dataset = {}
 
     with open(processed_intervals_file, 'r') as fp:
@@ -84,7 +83,7 @@ def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
         if not set(dataset_dict.keys()).issubset(RAW_INPUT_NAMES):
             err_msg = """ {} in {} has an unexpected input name!
                           Supported input names are {}""".format(
-                              dataset_id, raw_inputs_file, RAW_INPUT_NAMES)
+                dataset_id, raw_inputs_file, RAW_INPUT_NAMES)
             raise ValueError(err_msg)
         for input_name in RAW_INPUT_NAMES:
             if input_name not in dataset_dict:
@@ -100,7 +99,7 @@ def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
                     err_msg = """ Cannot parse consistent raw input datasets:
                                   {0} in {1} inconsistent with {0}
                                   in the first dataset in {2} """.format(
-                                      input_id, dataset_id, raw_inputs_file)
+                        input_id, dataset_id, raw_inputs_file)
                     raise ValueError(err_msg)
 
     return datasets

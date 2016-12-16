@@ -16,7 +16,8 @@ Each dataset consists of one or more datafiles, and one set of intervals and lab
 """
 
 
-def get_readers_and_tasks(processed_inputs_file, processed_intervals_file, name='data-readers'):
+def get_readers_and_tasks(processed_inputs_file, processed_intervals_file, name='data-readers',
+                          in_memory=True):
     """Generate a reader and examples queue for each dataset.
 
     Args:
@@ -48,14 +49,15 @@ def get_readers_and_tasks(processed_inputs_file, processed_intervals_file, name=
             if 'labels' in dataset.keys():
                 labels = dataset['labels']
             examples_queues[dataset_id] = get_readers_for_dataset(
-                intervals, datafiles, labels, name=dataset_id)
+                intervals, datafiles, labels, name=dataset_id, in_memory=in_memory)
 
     return examples_queues, task_names
 
 
 def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_intervals_file,
                                         validation_chroms=[], holdout_chroms=[],
-                                        name='data-readers', no_validation_queues=False):
+                                        name='data-readers', no_validation_queues=False,
+                                        in_memory=True):
     """Generate two reader and examples queues for train/validation of each dataset.
 
     Args:
@@ -116,17 +118,18 @@ def get_readers_and_tasks_with_holdouts(processed_inputs_file, processed_interva
                 valid_labels = labels[validation_idxs]
 
             train_examples_queues[dataset_id] = get_readers_for_dataset(
-                train_intervals, datafiles, train_labels, name='{}-training'.format(dataset_id))
+                train_intervals, datafiles, train_labels, name='{}-training'.format(dataset_id),
+                in_memory=in_memory)
             if not no_validation_queues:
                 valid_examples_queues[dataset_id] = get_readers_for_dataset(
-                    valid_intervals, datafiles, valid_labels,
-                    name='{}-validation'.format(dataset_id))
+                    valid_intervals, datafiles, labels=valid_labels,
+                    name='{}-validation'.format(dataset_id), read_batch_size=1, in_memory=in_memory)
 
     return train_examples_queues, valid_examples_queues, task_names
 
 
 def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-reader',
-                            read_batch_size=128):
+                            read_batch_size=128, in_memory=True):
     """Create an input pipeline for one dataset.
 
     Args:
@@ -153,7 +156,8 @@ def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-rea
             reader_kwargs['norm_params'] = 'local_zscore' if k == 'dnase_data_dir' else None
             reader_kwargs['interval_params'] = 'midpoint' if k == 'dnase_peaks_counts_data_dir' else None
             read_values[k] = bcolz_interval_reader(
-                to_read, datafile, interval_size, op_name='{}-reader'.format(k), **reader_kwargs)
+                to_read, datafile, interval_size, op_name='{}-reader'.format(k),
+                in_memory=in_memory, **reader_kwargs)
 
         # Enqueue the read values, along with labels and intervals
         interval_tensor_dict = {k: to_read[k]

@@ -101,10 +101,9 @@ def get_train_readers_and_tasknames(processed_inputs_file, processed_intervals_f
             train_intervals = {k: intervals[k][train_idxs]
                                for k in ['chrom', 'start', 'end']}
 
-            print('Num train intervals: {}'.format(train_idxs.shape[0]))
-            print('Num validation intervals: {}'.format(
-                validation_idxs.shape[0]))
-            print('Num holdout intervals: {}'.format(holdout_idxs.shape[0]))
+            print('Num train intervals: {}'.format(np.sum(train_idxs)))
+            print('Num validation intervals: {}'.format(np.sum(validation_idxs)))
+            print('Num holdout intervals: {}'.format(np.sum(holdout_idxs)))
 
             datafiles = dataset['inputs']
             labels = None
@@ -133,7 +132,7 @@ def get_valid_readers_and_tasknames(processed_inputs_file, processed_intervals_f
         validation_chroms: (optional) list of chrom strings to provide as validation examples
         holdout_chroms: (optional) list of heldout chrom strings that will not be provided
 
-    Returns: a tuple of (validation_readers, task_names):
+    Returns: a tuple of (validation_readers, task_names, num_validation_exs):
 
         validation_readers: a dictionary of an examples queue for each dataset. Each queue contains:
             intervals/start (int) - the start coordinate of the intervals
@@ -158,6 +157,7 @@ def get_valid_readers_and_tasknames(processed_inputs_file, processed_intervals_f
         datasets = parse_inputs_and_intervals(
             processed_inputs_file, processed_intervals_file)
         task_names = datasets[list(datasets.keys())[0]]['task_names']
+        num_validation_exs = 0
 
         valid_examples_queues = {}
         for dataset_id, dataset in datasets.items():
@@ -166,6 +166,7 @@ def get_valid_readers_and_tasknames(processed_inputs_file, processed_intervals_f
             validation_idxs = np.in1d(intervals['chrom'], validation_chroms)
             valid_intervals = {k: intervals[k][validation_idxs]
                                for k in ['chrom', 'start', 'end']}
+            num_validation_exs += np.sum(validation_idxs)
 
             datafiles = dataset['inputs']
             labels = None
@@ -176,13 +177,14 @@ def get_valid_readers_and_tasknames(processed_inputs_file, processed_intervals_f
 
             valid_examples_queues[dataset_id] = get_readers_for_dataset(
                 valid_intervals, datafiles, labels=valid_labels,
-                name='{}-validation'.format(dataset_id), read_batch_size=1, in_memory=in_memory)
+                name='{}-validation'.format(dataset_id), read_batch_size=1, in_memory=in_memory,
+                num_epochs=1)
 
-    return valid_examples_queues, task_names
+    return valid_examples_queues, task_names, num_validation_exs
 
 
 def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-reader',
-                            read_batch_size=128, in_memory=True):
+                            read_batch_size=128, in_memory=True, num_epochs=None):
     """Create an input pipeline for one dataset.
 
     Args:
@@ -200,7 +202,7 @@ def get_readers_for_dataset(intervals, datafiles, labels=None, name='dataset-rea
         # Queue to store intervals to read, outputs are dequeued tensors
         interval_size = int(intervals['end'][0] - intervals['start'][0])
         to_read = interval_queue(intervals, labels, dequeue_size=read_batch_size,
-                                 name='interval-queue')
+                                 name='interval-queue', num_epochs=num_epochs)
 
         # Create a reader for each datafile
         read_values = {}

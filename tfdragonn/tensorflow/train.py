@@ -4,6 +4,7 @@ import argparse
 import os
 import logging
 import shutil
+import math
 
 
 import tensorflow as tf
@@ -22,6 +23,7 @@ TRAIN_DIRNAME = 'train'
 VALID_DIRNAME = 'valid'
 
 IN_MEMORY = False
+BATCH_SIZE = 128
 
 logging.basicConfig(
     format='%(levelname)s %(asctime)s %(message)s', level=logging.DEBUG)
@@ -60,19 +62,22 @@ with train_graph.as_default():
     train_readers, task_names = get_train_readers_and_tasknames(
         args.datasetspec, args.intervalspec, validation_chroms=VALID_CHROMS,
         holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
-    train_shared_queue = SharedExamplesQueue(train_readers, task_names, batch_size=128)
+    train_shared_queue = SharedExamplesQueue(train_readers, task_names, batch_size=BATCH_SIZE)
 
 with valid_graph.as_default():
-    valid_readers, task_names = get_valid_readers_and_tasknames(
+    valid_readers, task_names, num_valid_exs = get_valid_readers_and_tasknames(
         args.datasetspec, args.intervalspec, validation_chroms=VALID_CHROMS,
         holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
-    valid_shared_queue = ValidationSharedExamplesQueue(valid_readers, task_names, batch_size=128)
+    valid_shared_queue = ValidationSharedExamplesQueue(
+        valid_readers, task_names, batch_size=BATCH_SIZE)
+    num_valid_batches = int(math.floor(num_valid_exs / BATCH_SIZE) - 1)
 
 logging.info('Setting up model')
 
 
 def get_model():
     return SequenceAndDnaseClassifier(num_tasks=num_tasks, fc_layer_widths=(800, 300, 50))
+
 
 num_tasks = len(task_names)
 with train_graph.as_default():
@@ -93,4 +98,5 @@ with train_graph.as_default():
 
 logging.info('Starting eval')
 with valid_graph.as_default():
-    trainer.evaluate(valid_shared_queue, valid_log_dir, checkpoint, session_config)
+    trainer.evaluate(
+        valid_shared_queue, num_valid_batches, valid_log_dir, checkpoint, session_config)

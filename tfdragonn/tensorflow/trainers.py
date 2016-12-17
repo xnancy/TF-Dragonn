@@ -12,9 +12,6 @@ from metrics import classification_metrics
 from models import Classifier
 
 
-EVAL_MAX_EVALS = 250000000
-
-
 class ClassiferTrainer(object):
 
     def __init__(self, model, optimizer=tf.train.AdamOptimizer, lr=0.0003,
@@ -49,14 +46,15 @@ class ClassiferTrainer(object):
         return weights
 
     def get_loss(self, logits, labels, weights):
-        sigmoid_xentropy_loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
-        tf.summary.scalar('loss/simoid-xentropy-loss', sigmoid_xentropy_loss)
+        with tf.variable_scope('loss'):
+            sigmoid_xentropy_loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
+            tf.summary.scalar('simoid-xentropy-loss', sigmoid_xentropy_loss)
 
-        # this adds regularization if it's specified
-        total_loss = slim.losses.get_total_loss()
-        tf.summary.scalar('loss/total-loss', total_loss)
+            # this adds regularization if it's specified
+            total_loss = slim.losses.get_total_loss()
+            tf.summary.scalar('total-loss', total_loss)
 
-        return total_loss
+            return total_loss
 
     def get_logits_labels_loss_weights(self, examples_queue):
         inputs = examples_queue.outputs
@@ -85,7 +83,6 @@ class ClassiferTrainer(object):
         batch_size = dataset_idxs.get_shape()[0].value
         total_steps = int(self.num_epochs * self.epoch_size / batch_size)
 
-        # TODO(cprobert): implement early stopping
         slim.learning.train(
             train_op, train_log_dir, number_of_steps=total_steps, save_summaries_secs=10,
             trace_every_n_steps=1000, save_interval_secs=120, session_config=session_config,
@@ -97,7 +94,7 @@ class ClassiferTrainer(object):
         checkpoint_fname = checkpoint_fname.rstrip('.index')
         return checkpoint_fname
 
-    def evaluate(self, examples_queue, valid_log_dir, checkpoint, session_config=None):
+    def evaluate(self, examples_queue, num_evals, valid_log_dir, checkpoint, session_config=None):
         logits, labels, loss, weights = self.get_logits_labels_loss_weights(examples_queue)
         task_names = examples_queue.task_names
         dataset_names = examples_queue.dataset_labels
@@ -107,8 +104,9 @@ class ClassiferTrainer(object):
             logits, labels, weights, dataset_idxs, dataset_names, task_names)
 
         eval_results = slim.evaluation.evaluate_once(
-            master='', checkpoint_path=checkpoint, logdir=valid_log_dir, num_evals=EVAL_MAX_EVALS,
+            master='', checkpoint_path=checkpoint, logdir=valid_log_dir, num_evals=num_evals,
             eval_op=names_to_updates.values(), session_config=session_config,
-            final_op=names_to_values.values())
+            final_op=names_to_values)
 
         print(eval_results)
+        return eval_results

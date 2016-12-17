@@ -24,17 +24,19 @@ def classification_metrics(logits, labels, weights, dataset_idxs, dataset_names,
     return names2values, names2updates
 
 
-def metrics_by_task(self, logits, labels, weights, task_names, prefix='TF'):
+def metrics_by_task(logits, labels, weights, task_names, prefix='TF'):
     with tf.variable_scope('metrics_by_task'):
         for i, task_name in enumerate(task_names):
             t_logits = logits[:, i]
             t_labels = labels[:, i]
             t_weights = weights[:, i]
             t_prefix = '{}-{}'.format(prefix, task_name)
-            create_all_metrics(t_logits, t_labels, t_weights, t_prefix)
+            names_to_values, names_to_updates = create_all_metrics(
+                t_logits, t_labels, t_weights, t_prefix)
+        return names_to_values, names_to_updates
 
 
-def metrics_by_dataset(self, logits, labels, weights, dataset_idxs, dataset_names,
+def metrics_by_dataset(logits, labels, weights, dataset_idxs, dataset_names,
                        prefix='celltype'):
     with tf.variable_scope('metrics_by_dataset'):
         for i, dataset_name in enumerate(dataset_names):
@@ -43,7 +45,9 @@ def metrics_by_dataset(self, logits, labels, weights, dataset_idxs, dataset_name
                               tf.zeros_like(labels, dtype=tf.float32))
             d_weights = tf.multiply(d_mask, weights)
             d_prefix = '{}-{}'.format(prefix, dataset_name)
-            create_all_metrics(logits, labels, d_weights, d_prefix)
+            names_to_values, names_to_updates = create_all_metrics(
+                logits, labels, d_weights, d_prefix)
+        return names_to_values, names_to_updates
 
 
 def create_all_metrics(logits, labels, weights, prefix):
@@ -98,4 +102,4 @@ def get_merged_classification_metrics(logits, labels, weights, prefix):
 
 def register_summaries_for_metrics(names_to_values):
     for metric_name, metric_update in names_to_values.items():
-        tf.summary.scalar(metric_name, metric_update, description=metric_name)
+        tf.summary.scalar(metric_name, metric_update)

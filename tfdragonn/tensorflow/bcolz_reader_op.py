@@ -43,9 +43,10 @@ def bcolz_interval_reader(intervals, data_directory, interval_size=1000, norm_pa
         if interval_params:
             with tf.variable_scope('interval_slicer'):
                 assert (interval_params == "midpoint")
-                bed3_entries_tensors[1] = (bed3_entries_tensors[1] + bed3_entries_tensors[2]) / 2
-                bed3_entries_tensors[2] = bed3_entries_tensors[1] + 1
+                bed3_entries_tensors[1] += int(interval_size/2)
+                bed3_entries_tensors[2] -= interval_size - int(interval_size/2) - 1
             interval_size = 1
+
 
         # Check what the size of the batches to read is
         read_batch_size = bed3_entries_tensors[0].get_shape()[0].value

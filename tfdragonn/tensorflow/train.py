@@ -13,7 +13,7 @@ from dataset_interval_reader import get_train_readers_and_tasknames
 from dataset_interval_reader import get_valid_readers_and_tasknames
 from shared_examples_queue import SharedExamplesQueue
 from shared_examples_queue import ValidationSharedExamplesQueue
-from models import SequenceAndDnaseClassifier
+import models
 from trainers import ClassiferTrainer
 from early_stopper import train_until_earlystop
 
@@ -37,6 +37,10 @@ logger = logging.getLogger('train-wrapper')
 parser = argparse.ArgumentParser()
 parser.add_argument('--datasetspec', type=str, required=True, help='Dataspec file')
 parser.add_argument('--intervalspec', type=str, required=True, help='Intervalspec file')
+parser.add_argument('--model-type', type=str, default='SequenceAndDnaseClassifier',
+                    help="""Which model to use.
+                            Supported options: SequenceAndDnaseClassifier, SequenceDnaseAndDnasePeaksCountsClassifier.
+                            Default: SequenceAndDnaseClassifier""")
 parser.add_argument('--logdir', type=str, required=True, help='Logging directory')
 parser.add_argument('--visiblegpus', type=str, required=True, help='Visible GPUs string')
 args = parser.parse_args()
@@ -81,7 +85,8 @@ logging.info('Setting up model')
 
 
 def get_model():
-    return SequenceAndDnaseClassifier(num_tasks=num_tasks, fc_layer_widths=(800, 300, 50))
+    model_class = getattr(models, args.model_type)
+    return model_class(num_tasks=num_tasks)
 
 
 num_tasks = len(task_names)

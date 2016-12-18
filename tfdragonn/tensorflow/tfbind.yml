@@ -127,7 +127,6 @@ dependencies:
   - bcolz==1.1.1.dev19
   - dask==0.12.0
   - futures==3.0.5
-  - genomedatalayer (/users/cprobert/dev/genomedatalayer)==0.3
   - ipython-genutils==0.1.0
   - jupyter-client==4.4.0
   - jupyter-console==5.0.0

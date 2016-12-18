@@ -15,12 +15,17 @@ from shared_examples_queue import SharedExamplesQueue
 from shared_examples_queue import ValidationSharedExamplesQueue
 from models import SequenceAndDnaseClassifier
 from trainers import ClassiferTrainer
+from early_stopper import train_until_earlystop
 
 HOLDOUT_CHROMS = ['chr1', 'chr8', 'chr21']
 VALID_CHROMS = ['chr9']
 
 TRAIN_DIRNAME = 'train'
 VALID_DIRNAME = 'valid'
+
+EARLYSTOPPING_KEY = 'metrics/auPRC'
+EARLYSTOPPING_PATIENCE = 4
+EARLYSTOPPING_TOLERANCE = 1e-4
 
 IN_MEMORY = False
 BATCH_SIZE = 128
@@ -87,16 +92,25 @@ with valid_graph.as_default():
     valid_model = get_model()
     evaluator = ClassiferTrainer(valid_model)
 
-logging.info('Starting training')
-
 session_config = tf.ConfigProto()
 session_config.gpu_options.deferred_deletion_bytes = int(250 * 1e6)  # 250MB
 session_config.gpu_options.visible_device_list = args.visiblegpus
 
-with train_graph.as_default():
-    checkpoint = trainer.train(train_shared_queue, train_log_dir, session_config=session_config)
 
-logging.info('Starting eval')
-with valid_graph.as_default():
-    trainer.evaluate(
-        valid_shared_queue, num_valid_batches, valid_log_dir, checkpoint, session_config)
+def train_callback():
+    with train_graph.as_default():
+        checkpoint = trainer.train(
+            train_shared_queue, train_log_dir, session_config=session_config)
+        return checkpoint
+
+
+def evaluate_callback(checkpoint):
+    with valid_graph.as_default():
+        eval_metrics = evaluator.evaluate(
+            valid_shared_queue, num_valid_batches, valid_log_dir, checkpoint, session_config)
+        return eval_metrics
+
+
+train_until_earlystop(
+    train_callback, evaluate_callback, metric_key=EARLYSTOPPING_KEY,
+    patience=EARLYSTOPPING_PATIENCE, tolerance=EARLYSTOPPING_TOLERANCE, max_epochs=100)

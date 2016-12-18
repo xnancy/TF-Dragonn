@@ -52,13 +52,17 @@ def metrics_by_dataset(logits, labels, weights, dataset_idxs, dataset_names,
 
 def create_all_metrics(logits, labels, weights, prefix):
     """Create summaries for all metrics for a given set of logits/labels/weights."""
-    names_to_values, names_to_updates = get_merged_classification_metrics(
-        logits, labels, weights, prefix)
-    register_summaries_for_metrics(names_to_values)
+    with tf.variable_scope(prefix):
+        names_to_values, names_to_updates = get_merged_classification_metrics(
+            logits, labels, weights)
+        register_summaries_for_metrics(names_to_values)
+
+    names_to_values = {'{}/{}'.format(prefix, k): v for k, v in names_to_values.items()}
+    names_to_updates = {'{}/{}'.format(prefix, k): v for k, v in names_to_updates.items()}
     return names_to_values, names_to_updates
 
 
-def get_merged_classification_metrics(logits, labels, weights, prefix):
+def get_merged_classification_metrics(logits, labels, weights):
     """Returns `names_to_values` and `names_to_updates` dicts for tf-slim metrics."""
     preds = tf.sigmoid(logits, name='sigmoid')
     binary_preds = tf.greater(preds, 0.5)
@@ -69,26 +73,25 @@ def get_merged_classification_metrics(logits, labels, weights, prefix):
     binary_labels_ints = tf.cast(binary_labels, tf.int32)
 
     names_to_metrics = {
-        '{}/Accuracy'.format(prefix): slim.metrics.streaming_accuracy(
+        'Accuracy': slim.metrics.streaming_accuracy(
             binary_preds, binary_labels, weights=weights),
-        '{}/Recall'.format(prefix): slim.metrics.streaming_recall(
+        'Recall': slim.metrics.streaming_recall(
             binary_preds_ints, binary_labels_ints, weights=weights),
-        '{}/Precision'.format(prefix): slim.metrics.streaming_precision(
+        'Precision': slim.metrics.streaming_precision(
             binary_preds_ints, binary_labels_ints, weights=weights),
-        '{}/auROC'.format(prefix): slim.metrics.streaming_auc(
+        'auROC': slim.metrics.streaming_auc(
             preds, labels, weights=weights, curve='ROC', name='auROC'),
-        '{}/auPRC'.format(prefix): slim.metrics.streaming_auc(
+        'auPRC': slim.metrics.streaming_auc(
             preds, labels, weights=weights, curve='PR', name='auPRC'),
-        '{}/label-balance'.format(prefix): slim.metrics.streaming_mean(
+        'label-balance': slim.metrics.streaming_mean(
             labels, weights=weights, name='label-balance'),
     }
 
     loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
-    loss_name = '{}/xentropy-loss'.format(prefix)
-    names_to_metrics[loss_name] = slim.metrics.streaming_mean(loss, name='xentropy-loss')
+    names_to_metrics['xentropy-loss'] = slim.metrics.streaming_mean(loss, name='xentropy-loss')
 
     for specificity in [0.01, 0.05, 0.1, 0.25]:
-        name = '{0}/sensitivity_at_{1:.2f}_specfty'.format(prefix, specificity)
+        name = 'sensitivity_at_{0:.2f}_specfty'.format(specificity)
         names_to_metrics[name] = slim.metrics.streaming_sensitivity_at_specificity(
             preds, labels, specificity, weights=weights, name=name)
 

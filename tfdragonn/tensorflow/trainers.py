@@ -14,18 +14,12 @@ from models import Classifier
 
 class ClassiferTrainer(object):
 
-    def __init__(self, model, optimizer=tf.train.AdamOptimizer, lr=0.0003,
-                 early_stopping_metric='auPRC', num_epochs=100, epoch_size=250000,
-                 early_stopping_patience=5):
-        assert isinstance(model, Classifier)
+    def __init__(self, optimizer=tf.train.AdamOptimizer, lr=0.0003, epoch_size=250000):
 
-        self.model = model
         self.optimizer = optimizer
         self.lr = lr
-        self.early_stopping_metric = early_stopping_metric
-        self.num_epochs = num_epochs
         self.epoch_size = epoch_size
-        self.early_stopping_patience = early_stopping_patience
+        self._current_step_limit = 0
 
     def get_ambiguous_mask(self, labels, dtype=tf.float32, name='ambiguous-examples-mask'):
         """Return a weights matrix with the same size as labels. Entries in labels
@@ -56,18 +50,19 @@ class ClassiferTrainer(object):
 
             return total_loss
 
-    def get_logits_labels_loss_weights(self, examples_queue):
+    def get_logits_labels_loss_weights(self, model, examples_queue):
         inputs = examples_queue.outputs
         labels = inputs["labels"]
 
-        logits = self.model.get_logits(inputs)
+        logits = model.get_logits(inputs)
         weights = self.get_weights(inputs)
         loss = self.get_loss(logits, labels, weights)
 
         return logits, labels, loss, weights
 
-    def train(self, examples_queue, train_log_dir, checkpoint=None, session_config=None):
-        logits, labels, loss, weights = self.get_logits_labels_loss_weights(examples_queue)
+    def train(self, model, examples_queue, train_log_dir, checkpoint=None,
+              session_config=None, num_epochs=1):
+        logits, labels, loss, weights = self.get_logits_labels_loss_weights(model, examples_queue)
         task_names = examples_queue.task_names
         dataset_names = examples_queue.dataset_labels
         dataset_idxs = examples_queue.outputs['dataset-index']
@@ -80,13 +75,22 @@ class ClassiferTrainer(object):
             loss, opt, clip_gradient_norm=2.0, summarize_gradients=True,
             colocate_gradients_with_ops=True, update_ops=names_to_updates.values())
 
+        if checkpoint is not None:
+            variables = slim.get_model_variables()
+            init_op, init_feeddict = slim.assign_from_checkpoint(checkpoint, variables)
+
+            def InitAssignFn(sess):
+                sess.run(init_op, init_feeddict)
+        else:
+            InitAssignFn = None
+
         batch_size = dataset_idxs.get_shape()[0].value
-        total_steps = int(self.num_epochs * self.epoch_size / batch_size)
+        self._current_step_limit += int(num_epochs * self.epoch_size / batch_size)
 
         slim.learning.train(
-            train_op, train_log_dir, number_of_steps=total_steps, save_summaries_secs=10,
-            trace_every_n_steps=1000, save_interval_secs=120, session_config=session_config,
-            graph=tf.get_default_graph())
+            train_op, train_log_dir, number_of_steps=self._current_step_limit,
+            save_summaries_secs=10, trace_every_n_steps=100000, save_interval_secs=120,
+            session_config=session_config, graph=tf.get_default_graph(), init_fn=InitAssignFn)
 
         checkpoint_regex = os.path.join(train_log_dir, 'model.ckpt*index')
         checkpoint_fname = max(glob.iglob(
@@ -94,8 +98,8 @@ class ClassiferTrainer(object):
         checkpoint_fname = checkpoint_fname.rstrip('.index')
         return checkpoint_fname
 
-    def evaluate(self, examples_queue, num_evals, valid_log_dir, checkpoint, session_config=None):
-        logits, labels, loss, weights = self.get_logits_labels_loss_weights(examples_queue)
+    def evaluate(self, model, examples_queue, num_evals, valid_log_dir, checkpoint, session_config=None):
+        logits, labels, loss, weights = self.get_logits_labels_loss_weights(model, examples_queue)
         task_names = examples_queue.task_names
         dataset_names = examples_queue.dataset_labels
         dataset_idxs = examples_queue.outputs['dataset-index']

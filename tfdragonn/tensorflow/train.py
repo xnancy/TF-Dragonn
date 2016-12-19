@@ -29,6 +29,7 @@ EARLYSTOPPING_TOLERANCE = 1e-4
 
 IN_MEMORY = False
 BATCH_SIZE = 128
+EPOCH_SIZE = 1000
 
 logging.basicConfig(
     format='%(levelname)s %(asctime)s %(message)s', level=logging.DEBUG)
@@ -62,60 +63,52 @@ logging.info('intervalspec file: {}'.format(args.intervalspec))
 logging.info('logdir path: {}'.format(args.logdir))
 logging.info('visiblegpus string: {}'.format(args.visiblegpus))
 
-train_graph = tf.Graph()
-valid_graph = tf.Graph()
 
 logging.info('Setting up readers')
 
-with train_graph.as_default():
-    train_readers, task_names = get_train_readers_and_tasknames(
-        args.datasetspec, args.intervalspec, validation_chroms=VALID_CHROMS,
-        holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
-    train_shared_queue = SharedExamplesQueue(train_readers, task_names, batch_size=BATCH_SIZE)
 
-with valid_graph.as_default():
-    valid_readers, task_names, num_valid_exs = get_valid_readers_and_tasknames(
-        args.datasetspec, args.intervalspec, validation_chroms=VALID_CHROMS,
-        holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
-    valid_shared_queue = ValidationSharedExamplesQueue(
-        valid_readers, task_names, batch_size=BATCH_SIZE)
-    num_valid_batches = int(math.floor(num_valid_exs / BATCH_SIZE) - 1)
-
-logging.info('Setting up model')
-
-
-def get_model():
+def get_model(num_tasks):
     model_class = getattr(models, args.model_type)
     return model_class(num_tasks=num_tasks)
 
-
-num_tasks = len(task_names)
-with train_graph.as_default():
-    train_model = get_model()
-    trainer = ClassiferTrainer(train_model, num_epochs=1, epoch_size=10000)
-with valid_graph.as_default():
-    valid_model = get_model()
-    evaluator = ClassiferTrainer(valid_model)
 
 session_config = tf.ConfigProto()
 session_config.gpu_options.deferred_deletion_bytes = int(250 * 1e6)  # 250MB
 session_config.gpu_options.visible_device_list = args.visiblegpus
 
-
-def train_callback():
-    with train_graph.as_default():
-        checkpoint = trainer.train(
-            train_shared_queue, train_log_dir, session_config=session_config)
-        return checkpoint
+trainer = ClassiferTrainer(epoch_size=EPOCH_SIZE)
 
 
-def evaluate_callback(checkpoint):
-    with valid_graph.as_default():
-        eval_metrics = evaluator.evaluate(
-            valid_shared_queue, num_valid_batches, valid_log_dir, checkpoint, session_config)
+def train(checkpoint=None, num_epochs=1):
+    with tf.Graph().as_default():
+        train_readers, task_names = get_train_readers_and_tasknames(
+            args.datasetspec, args.intervalspec, validation_chroms=VALID_CHROMS,
+            holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
+        train_queue = SharedExamplesQueue(train_readers, task_names, batch_size=BATCH_SIZE)
+        num_tasks = len(task_names)
+        train_model = get_model(num_tasks)
+
+        new_checkpoint = trainer.train(
+            train_model, train_queue, train_log_dir, checkpoint, session_config, num_epochs)
+        return new_checkpoint
+
+
+def validate(checkpoint):
+    with tf.Graph().as_default():
+        valid_readers, task_names, num_valid_exs = get_valid_readers_and_tasknames(
+            args.datasetspec, args.intervalspec, validation_chroms=VALID_CHROMS,
+            holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
+        valid_queue = ValidationSharedExamplesQueue(
+            valid_readers, task_names, batch_size=BATCH_SIZE)
+        num_batches = int(math.floor(num_valid_exs / BATCH_SIZE) - 1)
+        num_tasks = len(task_names)
+        valid_model = get_model(num_tasks)
+
+        eval_metrics = trainer.evaluate(
+            valid_model, valid_queue, num_batches, valid_log_dir, checkpoint, session_config)
         return eval_metrics
 
 
 train_until_earlystop(
-    train_callback, evaluate_callback, metric_key=EARLYSTOPPING_KEY,
-    patience=EARLYSTOPPING_PATIENCE, tolerance=EARLYSTOPPING_TOLERANCE, max_epochs=100)
+    train, validate, metric_key=EARLYSTOPPING_KEY, patience=EARLYSTOPPING_PATIENCE,
+    tolerance=EARLYSTOPPING_TOLERANCE, max_epochs=100)

@@ -25,6 +25,8 @@ def classification_metrics(logits, labels, weights, dataset_idxs, dataset_names,
 
 
 def metrics_by_task(logits, labels, weights, task_names, prefix='TF'):
+    overall_names_to_values = {}
+    overall_names_to_updates = {}
     with tf.variable_scope('metrics_by_task'):
         for i, task_name in enumerate(task_names):
             t_logits = logits[:, i]
@@ -33,11 +35,15 @@ def metrics_by_task(logits, labels, weights, task_names, prefix='TF'):
             t_prefix = '{}-{}'.format(prefix, task_name)
             names_to_values, names_to_updates = create_all_metrics(
                 t_logits, t_labels, t_weights, t_prefix)
-        return names_to_values, names_to_updates
+            overall_names_to_values.update(names_to_values)
+            overall_names_to_updates.update(names_to_updates)
+        return overall_names_to_values, overall_names_to_updates
 
 
 def metrics_by_dataset(logits, labels, weights, dataset_idxs, dataset_names,
                        prefix='celltype'):
+    overall_names_to_values = {}
+    overall_names_to_updates = {}
     with tf.variable_scope('metrics_by_dataset'):
         for i, dataset_name in enumerate(dataset_names):
             d_mask = tf.where(tf.equal(dataset_idxs, i),
@@ -47,7 +53,9 @@ def metrics_by_dataset(logits, labels, weights, dataset_idxs, dataset_names,
             d_prefix = '{}-{}'.format(prefix, dataset_name)
             names_to_values, names_to_updates = create_all_metrics(
                 logits, labels, d_weights, d_prefix)
-        return names_to_values, names_to_updates
+            overall_names_to_values.update(names_to_values)
+            overall_names_to_updates.update(names_to_updates)
+        return overall_names_to_values, overall_names_to_updates
 
 
 def create_all_metrics(logits, labels, weights, prefix):

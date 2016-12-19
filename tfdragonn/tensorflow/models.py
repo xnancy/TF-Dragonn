@@ -37,7 +37,8 @@ class SequenceAndDnaseClassifier(Classifier):
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
-                 fc_layer_widths=(), pool_width=25, batch_norm=False):
+                 pool_width=25, fc_layer_widths=(),
+                 task_specific_fc_layer_widths=(), batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
@@ -50,6 +51,7 @@ class SequenceAndDnaseClassifier(Classifier):
         self.num_combined_filters = num_combined_filters
         self.combined_conv_width = combined_conv_width
         self.fc_layer_widths = fc_layer_widths
+        self.task_specific_fc_layer_widths = task_specific_fc_layer_widths
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
@@ -103,8 +105,19 @@ class SequenceAndDnaseClassifier(Classifier):
             logits = slim.flatten(logits, scope='flatten')
             if len(self.fc_layer_widths) > 0:
                 logits = slim.stack(logits, slim.fully_connected, self.fc_layer_widths, scope='fc')
-            logits = slim.fully_connected(
-                logits, self.num_tasks, activation_fn=None, scope='output-fc')
+            if len(self.task_specific_fc_layer_widths) > 0:
+                task_specific_logits = []
+                for task_id in xrange(self.num_tasks):
+                    task_specific_logits.append(
+                        slim.stack(logits, slim.fully_connected, self.task_specific_fc_layer_widths,
+                                   scope='fc_task{}'.format(task_id)))
+                    task_specific_logits[-1] = slim.fully_connected(
+                        task_specific_logits[-1], 1, activation_fn=None,
+                        scope='logit{}'.format(task_id))
+                logits = tf.concat(1, task_specific_logits)
+            else:
+                logits = slim.fully_connected(
+                    logits, self.num_tasks, activation_fn=None, scope='output-fc')
 
             return logits
 

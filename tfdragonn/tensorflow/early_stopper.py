@@ -3,7 +3,7 @@ import logging
 logger = logging.getLogger('earlystopper')
 
 
-def train_until_earlystop(train, validate, metric_key='auPRC', patience=4, tolerance=1e-4,
+def train_until_earlystop(train, validate, metric_key='metrics/auPRC', patience=4, tolerance=1e-4,
                           max_epochs=100):
     history = 0.0
     timer = 0

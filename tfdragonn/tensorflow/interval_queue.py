@@ -11,7 +11,8 @@ A queue for storing intervals and labels.
 _DEFAULT_CAPACITY = 10000
 
 
-def interval_queue(intervals, labels=None, dequeue_size=128, name='interval-queue'):
+def interval_queue(intervals, labels=None, dequeue_size=128,
+                   name='interval-queue', num_epochs=None):
     """Create an interval queue.
 
     The intervals are provided as a dictionary of chrom, start, and end 1D numpy arrays. The labels
@@ -40,14 +41,16 @@ def interval_queue(intervals, labels=None, dequeue_size=128, name='interval-queu
     with tf.variable_scope(name):
         chrom_queue = tf.train.string_input_producer(
             tf.convert_to_tensor(intervals['chrom']), shuffle=False,
-            capacity=_DEFAULT_CAPACITY, name='chrom-buffer')
+
+            capacity=_DEFAULT_CAPACITY, name='chrom-buffer', num_epochs=num_epochs)
         start_queue = tf.train.input_producer(
             tf.convert_to_tensor(intervals['start']), shuffle=False,
-            capacity=_DEFAULT_CAPACITY, name='start-buffer')
+            capacity=_DEFAULT_CAPACITY, name='start-buffer', num_epochs=num_epochs)
         end_queue = tf.train.input_producer(
             tf.convert_to_tensor(intervals['end']), shuffle=False,
-            capacity=_DEFAULT_CAPACITY, name='end-buffer')
+            capacity=_DEFAULT_CAPACITY, name='end-buffer', num_epochs=num_epochs)
 
+        # These dequeue ops can raise tf.OutOfRange if num_epochs is not None
         outputs = {
             'chrom': chrom_queue.dequeue_many(dequeue_size),
             'start': start_queue.dequeue_many(dequeue_size),
@@ -62,4 +65,4 @@ def interval_queue(intervals, labels=None, dequeue_size=128, name='interval-queu
 
             outputs['labels'] = labels_dequeue
 
-        return outputs
+    return outputs

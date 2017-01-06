@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import csv
 import os
 import logging
 import shutil
@@ -44,6 +45,7 @@ parser.add_argument('--model-type', type=str, default='SequenceAndDnaseClassifie
                             Default: SequenceAndDnaseClassifier""")
 parser.add_argument('--logdir', type=str, required=True, help='Logging directory')
 parser.add_argument('--visiblegpus', type=str, required=True, help='Visible GPUs string')
+parser.add_argument('--tasks', type=str, required=False, help='List of tasks as a csv string')
 args = parser.parse_args()
 
 assert(os.path.isfile(args.datasetspec))
@@ -57,6 +59,12 @@ os.mkdir(args.logdir)
 assert(os.path.isdir(args.logdir))
 train_log_dir = os.path.join(args.logdir, TRAIN_DIRNAME)
 valid_log_dir = os.path.join(args.logdir, VALID_DIRNAME)
+
+tasks = None
+if 'tasks' in args:
+    if args.tasks:
+        tasks = list(csv.reader([args.tasks]))[0]
+        logging.info('tasks: {}'.format(tasks))
 
 logging.info('dataspec file: {}'.format(args.datasetspec))
 logging.info('intervalspec file: {}'.format(args.intervalspec))
@@ -83,7 +91,7 @@ def train(checkpoint=None, num_epochs=1):
     with tf.Graph().as_default():
         train_readers, task_names = get_train_readers_and_tasknames(
             args.datasetspec, args.intervalspec, validation_chroms=VALID_CHROMS,
-            holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
+            holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY, tasks=tasks)
         train_queue = SharedExamplesQueue(train_readers, task_names, batch_size=BATCH_SIZE)
         num_tasks = len(task_names)
         train_model = get_model(num_tasks)
@@ -97,7 +105,7 @@ def validate(checkpoint):
     with tf.Graph().as_default():
         valid_readers, task_names, num_valid_exs = get_valid_readers_and_tasknames(
             args.datasetspec, args.intervalspec, validation_chroms=VALID_CHROMS,
-            holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
+            holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY, tasks=tasks)
         valid_queue = ValidationSharedExamplesQueue(
             valid_readers, task_names, batch_size=BATCH_SIZE)
         num_batches = int(math.floor(num_valid_exs / BATCH_SIZE) - 1)

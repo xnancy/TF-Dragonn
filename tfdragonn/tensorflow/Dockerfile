@@ -3,13 +3,13 @@ FROM kundajelab/cuda-anaconda-base:latest
 MAINTAINER Chris Probert <cprobert@stanford.edu>
 
 #
-# Setup and activate the anaconda environment
+# Install tfdragonn dependencies
 #
-COPY tfbind.yml .
-RUN conda env create -f tfbind.yml
-ENV PATH /opt/conda/envs/tfbind/bin:$PATH
+COPY conda_requirements.txt .
+RUN conda install -y --file  conda_requirements.txt -c astro -c bioconda -c r -c defaults -c conda-forge && conda clean -t
 
-#
-# Install tensorflow
-#
-RUN pip --no-cache-dir install https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-0.12.0rc1-cp27-none-linux_x86_64.whl
+COPY pip_requirements.txt .
+RUN pip install --no-cache-dir -r pip_requirements.txt
+
+RUN mkdir tfdragonn
+COPY ./*.py ./*.bash tfdragonn/

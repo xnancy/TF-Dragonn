@@ -56,7 +56,7 @@ def get_readers_and_tasks(processed_inputs_file, processed_intervals_file, name=
 
 
 def get_train_readers_and_tasknames(processed_inputs_file, processed_intervals_file,
-                                    validation_chroms=[], holdout_chroms=[],
+                                    validation_chroms=[], holdout_chroms=[], tasks=[],
                                     name='data-readers', in_memory=True):
     """Generate two reader and examples queues for train/validation of each dataset.
 

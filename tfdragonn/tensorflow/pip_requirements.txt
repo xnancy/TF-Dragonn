@@ -1,0 +1,2 @@
+git+https://github.com/Blosc/bcolz
+https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-0.12.0rc1-cp27-none-linux_x86_64.whl

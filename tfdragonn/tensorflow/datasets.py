@@ -62,10 +62,11 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file, 
 
         dataset[dataset_id]['inputs'] = all_datasets[dataset_id]
 
-        dataset[dataset_id]['labels'] = np.load(dataset_dict['labels'])
-        if tasks:
-            dataset[dataset_id]['labels'] = dataset[
-                dataset_id]['labels'][:, task_idxs]
+        if 'labels' in dataset_dict.keys():
+            dataset[dataset_id]['labels'] = np.load(dataset_dict['labels'])
+            if tasks:
+                dataset[dataset_id]['labels'] = dataset[
+                    dataset_id]['labels'][:, task_idxs]
 
         bt = BedTool(dataset_dict['regions'])
         intervals_dict = {k: bt.to_dataframe()[k].as_matrix() for k in [

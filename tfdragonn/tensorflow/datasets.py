@@ -15,7 +15,7 @@ RAW_INPUT_NAMES = set(['genome_fasta', 'dnase_bigwig', 'dnase_peaks_bed',
 raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
                              'dnase_bigwig': 'dnase_data_dir',
                              'dnase_peaks_bed': 'dnase_peaks_counts_data_dir',
-                             'gencode_tss': 'gencode_tss_distances_data_dir',
+                             'gencode_tss': 'gencode_tss_peaks_counts_data_dir',
                              'gencode_annotation': 'gencode_annotation_distances_data_dir',
                              'gencode_polyA': 'gencode_polyA_distances_data_dir',
                              'gencode_lncRNA': 'gencode_lncRNA_distances_data_dir',
@@ -36,18 +36,6 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file, 
             if input_id in cur_dataset_dict:
                 all_datasets[cur_dataset_id][
                     input_id] = cur_dataset_dict[input_id]
-        """
-        if 'dnase_data_dir' in cur_dataset_dict:
-            all_datasets[cur_dataset_id][
-                'dnase_data_dir'] = cur_dataset_dict['dnase_data_dir']
-        if 'genome_data_dir' in cur_dataset_dict:
-            all_datasets[cur_dataset_id][
-                'genome_data_dir'] = cur_dataset_dict['genome_data_dir']
-        if ('dnase_peaks_counts' in cur_dataset_dict or ## account for temporary naming conventions
-            'dnase_peaks_counts_data_dir' in cur_dataset_dict):
-            all_datasets[cur_dataset_id][
-                'dnase_peaks_counts_data_dir'] = cur_dataset_dict['dnase_peaks_counts_data_dir']
-        """
     dataset = {}
 
     with open(processed_intervals_file, 'r') as fp:
@@ -74,10 +62,11 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file, 
 
         dataset[dataset_id]['inputs'] = all_datasets[dataset_id]
 
-        dataset[dataset_id]['labels'] = np.load(dataset_dict['labels'])
-        if tasks:
-            dataset[dataset_id]['labels'] = dataset[
-                dataset_id]['labels'][:, task_idxs]
+        if 'labels' in dataset_dict.keys():
+            dataset[dataset_id]['labels'] = np.load(dataset_dict['labels'])
+            if tasks:
+                dataset[dataset_id]['labels'] = dataset[
+                    dataset_id]['labels'][:, task_idxs]
 
         bt = BedTool(dataset_dict['regions'])
         intervals_dict = {k: bt.to_dataframe()[k].as_matrix() for k in [

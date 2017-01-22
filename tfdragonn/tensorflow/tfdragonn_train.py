@@ -18,14 +18,17 @@ def main():
     parser.add_argument('logdir', type=str)
     args = parser.parse_args()
 
-    assert(os.path.isfile(args.dataset_params_file))
-    assert(os.path.isfile(args.interval_params_file))
-    assert(os.path.isfile(args.model_params_file))
-    assert(not os.path.exists(args.logdir))
+    submit_train_task(args.dataset_params_file, args.interval_params_file,
+                      args.model_params_file, args.logdir)
 
-    train.delay(args.dataset_params_file, args.interval_params_file,
-          args.model_params_file, args.logdir)
 
+def submit_train_task(dataset_params_file, interval_params_file, model_params_file, logdir):
+    assert(os.path.isfile(dataset_params_file))
+    assert(os.path.isfile(interval_params_file))
+    assert(os.path.isfile(model_params_file))
+    assert(not os.path.exists(logdir))
+    train.delay(dataset_params_file, interval_params_file,
+                model_params_file, logdir)
 
 if __name__ == '__main__':
     main()

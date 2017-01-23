@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
 import argparse
-import csv
 import os
 import logging
 import shutil
 import math
-
+import uuid
 
 import tensorflow as tf
 
+import database
 from dataset_interval_reader import get_train_readers_and_tasknames
 from dataset_interval_reader import get_valid_readers_and_tasknames
 from shared_examples_queue import SharedExamplesQueue
@@ -30,29 +30,34 @@ EARLYSTOPPING_TOLERANCE = 1e-4
 
 IN_MEMORY = False
 BATCH_SIZE = 128
-EPOCH_SIZE = 1000
+EPOCH_SIZE = 250000
 
 logging.basicConfig(
     format='%(levelname)s %(asctime)s %(message)s', level=logging.DEBUG)
 logger = logging.getLogger('train-wrapper')
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--datasetspec', type=str,
-                    required=True, help='Dataspec file')
-parser.add_argument('--intervalspec', type=str,
-                    required=True, help='Intervalspec file')
-parser.add_argument('--model_type', type=str, default='SequenceAndDnaseClassifier',
-                    help="""Which model to use.
-                            Supported options: SequenceAndDnaseClassifier, SequenceDnaseAndDnasePeaksCountsClassifier.
-                            Default: SequenceAndDnaseClassifier""")
-parser.add_argument('--logdir', type=str, required=True,
-                    help='Logging directory')
-parser.add_argument('--visiblegpus', type=str,
-                    required=True, help='Visible GPUs string')
-args = parser.parse_args()
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--datasetspec', type=str,
+                        required=True, help='Dataspec file')
+    parser.add_argument('--intervalspec', type=str,
+                        required=True, help='Intervalspec file')
+    parser.add_argument('--model_type', type=str, default='SequenceAndDnaseClassifier',
+                        help="""Which model to use.
+                                Supported options: SequenceAndDnaseClassifier, SequenceDnaseAndDnasePeaksCountsClassifier.
+                                Default: SequenceAndDnaseClassifier""")
+    parser.add_argument('--logdir', type=str, required=True,
+                        help='Logging directory')
+    parser.add_argument('--visiblegpus', type=str,
+                        required=True, help='Visible GPUs string')
+    args = parser.parse_args()
+
+    train_tf_dragonn(args.datasetspec, args.intervalspec,
+                     args.model_type, args.logdir, args.visiblegpus, args.tasks)
 
 
-def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus, tasks):
+def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus):
 
     assert(os.path.isfile(datasetspec))
     assert(os.path.isfile(intervalspec))
@@ -66,16 +71,14 @@ def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus,
     train_log_dir = os.path.join(logdir, TRAIN_DIRNAME)
     valid_log_dir = os.path.join(logdir, VALID_DIRNAME)
 
-    tasks = None
-    if 'tasks' in args:
-        if tasks:
-            tasks = list(csv.reader([tasks]))[0]
-            logging.info('tasks: {}'.format(tasks))
-
     logging.info('dataspec file: {}'.format(datasetspec))
     logging.info('intervalspec file: {}'.format(intervalspec))
     logging.info('logdir path: {}'.format(logdir))
     logging.info('visiblegpus string: {}'.format(visiblegpus))
+
+    logging.info('registering with tfdragonn database')
+    database.add_run(uuid.uuid4(), model_type, datasetspec,
+                     intervalspec, 'none_used', logdir)
 
     logging.info('Setting up readers')
 
@@ -94,7 +97,7 @@ def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus,
         with tf.Graph().as_default():
             train_readers, task_names = get_train_readers_and_tasknames(
                 datasetspec, intervalspec, validation_chroms=VALID_CHROMS,
-                holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY, tasks=tasks)
+                holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
             train_queue = SharedExamplesQueue(
                 train_readers, task_names, batch_size=BATCH_SIZE)
             num_tasks = len(task_names)
@@ -108,7 +111,7 @@ def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus,
         with tf.Graph().as_default():
             valid_readers, task_names, num_valid_exs = get_valid_readers_and_tasknames(
                 datasetspec, intervalspec, validation_chroms=VALID_CHROMS,
-                holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY, tasks=tasks)
+                holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
             valid_queue = ValidationSharedExamplesQueue(
                 valid_readers, task_names, batch_size=BATCH_SIZE)
             num_batches = int(math.floor(num_valid_exs / BATCH_SIZE) - 1)
@@ -124,5 +127,5 @@ def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus,
         tolerance=EARLYSTOPPING_TOLERANCE, max_epochs=100)
 
 
-train_tf_dragonn(args.datasetspec, args.intervalspec,
-                 args.model_type, args.logdir, args.visiblegpus, args.tasks)
+if __name__ == '__main__':
+    main()

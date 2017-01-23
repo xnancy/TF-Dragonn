@@ -15,7 +15,11 @@ from genomedatalayer.shm import (
 
 from tfdragonn.datasets import parse_raw_intervals_config_file
 from tfdragonn.intervals import get_tf_predictive_setup
-from tfdragonn.tensorflow.datasets import parse_raw_inputs, raw_input2processed_input
+from tfdragonn.tensorflow import AMBIG_LABEL
+from tfdragonn.tensorflow.datasets import (
+    parse_raw_inputs, raw_input2processed_input,
+    parse_processed_intervals
+)
 from tfdragonn.tensorflow.extractors import extract_expression_to_file
 
 # setup logging
@@ -32,7 +36,7 @@ logger.propagate = False
 input2extractor_func = {'dnase_bigwig': extract_bigwig_to_file,
                         'genome_fasta': extract_fasta_to_file,
                         'dnase_peaks_bed': extract_bed_counts_to_file,
-                        'gencode_tss': extract_dist_to_intervals_to_file,
+                        'gencode_tss': extract_bed_counts_to_file,
                         'gencode_annotation': extract_dist_to_intervals_to_file,
                         'gencode_polyA': extract_dist_to_intervals_to_file,
                         'gencode_lncRNA': extract_dist_to_intervals_to_file,
@@ -46,6 +50,9 @@ def parse_args():
     raw_intervals_config_parser = argparse.ArgumentParser(add_help=False)
     raw_intervals_config_parser.add_argument('--raw-intervals-config-file', type=str, required=True,
                                              help='includes task names and map from dataset ids to raw interval files')
+    processed_intervals_config_parser = argparse.ArgumentParser(add_help=False)
+    processed_intervals_config_parser.add_argument('--processed-intervals-config-file', type=str, required=True,
+                                                   help='includes task names and map from dataset ids to processed interval files')
     multiprocessing_parser = argparse.ArgumentParser(add_help=False)
     multiprocessing_parser.add_argument('--n-jobs', type=int, default=1,
                                         help='num of processes')
@@ -74,6 +81,10 @@ def parse_args():
                                        help='size of flanks around labeled bins')
     label_regions_parser.add_argument('--stride', type=int, default=50,
                                        help='spacing between consecutive bins')
+    subset_parser = subparsers.add_parser('subset',
+                                          parents=[processed_intervals_config_parser,
+                                                   prefix_parser],
+                                           help="""This command subsets processed intervals and labels into individual tasks.""")
     # return command and command arguments
     args = vars(parser.parse_args())
     command = args.pop("command", None)
@@ -106,8 +117,8 @@ def main_extract(raw_inputs_config_file=None,
                 datafile = input_vals['datafile']
                 del input_vals['datafile']
                 if 'extract_subdir' in input_vals:
-                    extract_subdir = inputs_vals['extract_subdir']
-                    del inputs_vals['extract_subdir']
+                    extract_subdir = input_vals['extract_subdir']
+                    del input_vals['extract_subdir']
                 else:
                     extract_subdir = datafile
                 extractor_func = partial(extractor_func, **input_vals)
@@ -137,7 +148,7 @@ def main_label_regions(raw_intervals_config_file=None,
     Writes new data config file with the generated files.
     """
     raw_intervals_config = parse_raw_intervals_config_file(raw_intervals_config_file)
-    processed_intervals_dict = {"task_names": raw_intervals_config.task_names}
+    processed_intervals_dict = collections.OrderedDict([("task_names", raw_intervals_config.task_names)])
     logger.info("Generating regions and labels for datasets in {}...".format(raw_intervals_config_file))
     for dataset_id, raw_intervals in raw_intervals_config:
         logger.info("Generating regions and labels for dataset {}...".format(dataset_id))
@@ -145,7 +156,7 @@ def main_label_regions(raw_intervals_config_file=None,
         path_to_dataset_regions = os.path.abspath("{}.intervals.bed".format(dataset_prefix))
         path_to_dataset_labels = os.path.abspath("{}.labels.npy".format(dataset_prefix))
         if os.path.isfile("{}.intervals.bed".format(dataset_prefix)) and os.path.isfile("{}.labels.npy".format(dataset_prefix)):
-            logger.info("Regions file {} and labels file {} already exist. skipping dataset {1}!".format(path_to_dataset_regions, path_to_dataset_labels, dataset_id))
+            logger.info("Regions file {} and labels file {} already exist. skipping dataset {}!".format(path_to_dataset_regions, path_to_dataset_labels, dataset_id))
         else:
             regions, labels = get_tf_predictive_setup(raw_intervals.feature_beds, region_bedtool=raw_intervals.region_bed,
                                                       ambiguous_feature_bedtools=raw_intervals.ambiguous_feature_beds,
@@ -161,10 +172,49 @@ def main_label_regions(raw_intervals_config_file=None,
     logger.info("Done!")
 
 
+def main_subset(processed_intervals_config_file=None,
+                prefix=None):
+    """
+    Subsets a processed intervals config file by tasks.
+    """
+    logger.info("Splitting data in {} into individual tasks...".format(processed_intervals_config_file))
+    processed_intervals_dict = parse_processed_intervals(processed_intervals_config_file)
+    task_names = processed_intervals_dict['task_names']
+    task2task_config = collections.OrderedDict()
+    for task_name in task_names: # initialize task configs with task_names
+        task2task_config[task_name] = collections.OrderedDict([("task_names", [task_name])])
+    for dataset_id, dataset_dict in processed_intervals_dict.items():
+        if dataset_id == "task_names":
+            continue
+        logger.info("Splitting dataset {}...".format(dataset_id))
+        dataset_prefix = "{}.{}".format(prefix, dataset_id)
+        for task_indx, task_name in enumerate(task_names):
+            path_to_labels = os.path.abspath("{}.{}.labels.npy".format(dataset_prefix, task_name))
+            if os.path.isfile(path_to_labels):
+                task2task_config[task_name][dataset_id] = {"regions": dataset_dict['regions'], "labels": path_to_labels}
+                logger.info("Labels file {} already exist for task {} in dataset {}!".format(
+                    path_to_labels, task_name, dataset_id))
+                continue
+            task_labels = dataset_dict['labels'][:, task_indx][:, None]
+            if np.all(task_labels == AMBIG_LABEL): # no data for this task
+                logger.info("No data for task {} in dataset {}, proceeding to next task!".format(task_name, dataset_id))
+                continue
+            np.save(path_to_labels, task_labels)
+            task2task_config[task_name][dataset_id] = {"regions": dataset_dict['regions'], "labels": path_to_labels}
+            logger.info("Saved labels for {} to {}".format(dataset_id, path_to_labels))
+    # write task config files
+    for task_name, task_config in task2task_config.items():
+        config_fname = os.path.abspath("{}.{}.json".format(prefix, task_name))
+        json.dump(task_config, open(config_fname, "w"), indent=4)
+        logger.info("Wrote {} config file to {}.".format(task_name, config_fname))
+    logger.info("Done!")
+
+
 def main():
     # parse args
     command_functions = {'extract': main_extract,
-                         'label_regions': main_label_regions}
+                         'label_regions': main_label_regions,
+                         'subset': main_subset}
     command, args = parse_args()
     # run command
     command_functions[command](**args)

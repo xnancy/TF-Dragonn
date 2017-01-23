@@ -19,15 +19,17 @@ for gpu_idx in range(args.num_gpus):
     for replica_idx in range(args.num_replicas):
         name = '{}-gpu-{}-replica-{}'.format(hostname, gpu_idx, replica_idx)
         print('launching {}'.format(name))
-        p = subprocess.Popen(['TFDRAGONN_GPU={}'.format(
-            gpu_idx), 'celery', '-A', 'tfdragonn', 'worker', '-l', 'INFO', '-c', '1', '-n', name])
+        cmd = 'TFDRAGONN_GPU={} celery -A tfdragonn worker -l INFO -c 1 -n {}'.format(
+            gpu_idx, name)
+        p = subprocess.Popen(cmd, shell=True)
         workers.append(p)
 
 
 def signal_handler(signal, frame):
-    print('stopping celery_workers_up...')
+    print('\nstopping celery workers...\n')
     for p in workers:
         p.kill()
+    print('\nfinsihed stopping celery workers. Exiting.\n')
     sys.exit(0)
 
 

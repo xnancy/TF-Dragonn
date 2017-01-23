@@ -7,6 +7,7 @@ from __future__ import print_function
 import os
 import time
 import yaml
+import sys
 
 from celery import Celery
 
@@ -28,11 +29,12 @@ def get_gpu():
         GPU_TO_USE = int(GPU_TO_USE)
     return GPU_TO_USE
 
+
 if not os.path.isfile(CELERY_CONFIG_FILE):
     raise FileNotFoundError(
         'Celery config file does not exist: {}'.format(CELERY_CONFIG_FILE))
 with open(CELERY_CONFIG_FILE, 'r') as fp:
-    broker = yaml.load(fp)
+    broker = str(yaml.load(fp)['broker'])
 
 app = Celery('tfdragonn', broker=broker)
 

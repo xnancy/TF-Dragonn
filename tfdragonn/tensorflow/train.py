@@ -94,7 +94,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     logging.info('visiblegpus string: {}'.format(visiblegpus))
 
     logging.info('registering with tfdragonn database')
-    metadata = {}  #TODO(cprobert): save metadata here
+    metadata = {}  # TODO(cprobert): save metadata here
     database.add_run(run_id, datasetspec, intervalspec, modelspec, logdir, metadata)
 
     logging.info('Setting up readers')

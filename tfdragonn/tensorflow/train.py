@@ -82,8 +82,8 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
             shutil.rmtree(logdir)
     assert(not os.path.exists(logdir))
     assert(logdir.startswith(LOGDIR_PREFIX))
-    os.mkdir(logdir)
-    run_id = logdir.lstrip(LOGDIR_PREFIX)
+    os.makedirs(logdir)
+    run_id = str(logdir.lstrip(LOGDIR_PREFIX))
 
     train_log_dir = os.path.join(logdir, TRAIN_DIRNAME)
     valid_log_dir = os.path.join(logdir, VALID_DIRNAME)

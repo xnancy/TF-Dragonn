@@ -27,6 +27,75 @@ class Classifier(object):
         return self._num_tasks
 
 
+def expand_4D(input_tensor):
+    shape = [x.value for x in input_tensor.get_shape()]
+    if len(shape) == 2:  # 1-D input
+        new_shape = [shape[0], 1, shape[1], 1]
+    elif len(shape) == 3:  # 2-D input
+        new_shape = shape + [1]
+    else:
+        raise IOError('unrecognized shape: {}'.format(shape))
+    return tf.reshape(input_tensor, new_shape)
+
+
+class SequenceClassifier(Classifier):
+
+    @property
+    def get_inputs(self):
+        return ["data/genome_data_dir"]
+
+    def __init__(self, num_tasks=1,
+                 num_filters=(25, 25, 25), conv_width=(25, 25, 25),
+                 pool_width=25, fc_layer_widths=(500,),
+                 task_specific_fc_layer_widths=(80,), batch_norm=False):
+        assert len(num_filters) == len(conv_width)
+
+        self._num_tasks = num_tasks
+        self.num_filters = num_filters
+        self.conv_width = conv_width
+        self.fc_layer_widths = fc_layer_widths
+        self.task_specific_fc_layer_widths = task_specific_fc_layer_widths
+        self.pool_width = pool_width
+        self.batch_norm = batch_norm
+
+    def get_logits(self, inputs):
+        with slim.arg_scope(
+                [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
+                weights_initializer=initializers.he_normal_initializer(),
+                biases_initializer=tf.constant_initializer(0.0)):
+
+            seq_preds = inputs["data/genome_data_dir"]
+            seq_preds = expand_4D(seq_preds)
+            for i, (num_filter, filter_width) in enumerate(
+                    zip(self.num_filters, self.conv_width)):
+                filter_height = 4 if i == 0 else 1
+                filter_dims = [filter_height, filter_width]
+                seq_preds = slim.conv2d(seq_preds, num_filter, filter_dims, padding='VALID',
+                                        scope='sequence_conv{:d}'.format(i + 1))
+
+            print('shape after conv layers, before pooling: {}'.format(seq_preds.get_shape()))
+            seq_preds = slim.avg_pool2d(seq_preds, [1, self.pool_width], stride=[1, self.pool_width],
+                                     padding='VALID', scope='avg_pool')
+            seq_preds = slim.flatten(seq_preds, scope='flatten')
+            if len(self.fc_layer_widths) > 0:
+                seq_preds = slim.stack(seq_preds, slim.fully_connected, self.fc_layer_widths, scope='fc')
+            if len(self.task_specific_fc_layer_widths) > 0:
+                task_specific_seq_preds = []
+                for task_id in xrange(self.num_tasks):
+                    task_specific_seq_preds.append(
+                        slim.stack(seq_preds, slim.fully_connected, self.task_specific_fc_layer_widths,
+                                   scope='fc_task{}'.format(task_id)))
+                    task_specific_seq_preds[-1] = slim.fully_connected(
+                        task_specific_seq_preds[-1], 1, activation_fn=None,
+                        scope='logit{}'.format(task_id))
+                logits = tf.concat(1, task_specific_seq_preds)
+            else:
+                logits = slim.fully_connected(
+                    seq_preds, self.num_tasks, activation_fn=None, scope='output-fc')
+
+            return logits
+
+
 class SequenceAndDnaseClassifier(Classifier):
 
     @property
@@ -37,7 +106,7 @@ class SequenceAndDnaseClassifier(Classifier):
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
-                 pool_width=25, fc_layer_widths=(),
+                 pool_width=25, fc_layer_widths=(100,),
                  task_specific_fc_layer_widths=(), batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)

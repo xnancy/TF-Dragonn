@@ -106,3 +106,29 @@ def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
                     raise ValueError(err_msg)
 
     return datasets
+
+
+def parse_processed_intervals(processed_intervals_file, tasks=None):
+    """Parse the processed intervals files, return a data dictionary."""
+    with open(processed_intervals_file, 'r') as fp:
+        data = json.load(fp, object_pairs_hook=OrderedDict)
+
+    if tasks: # subset task_names
+        task2idx = {t: i for i, t in enumerate(data['task_names'])}
+        for t_name in tasks:
+            if t_name not in task2idx:
+                raise ValueError('Task {} was not found in intervals file {}'.format(
+                    t_name, processed_intervals_file))
+        task_idxs = np.array([task2idx[t] for t in tasks])
+        data['task_names'] = tasks
+
+    for dataset_id, dataset_dict in data.items():
+        if dataset_id == 'task_names':
+            continue
+        if 'labels' in dataset_dict.keys():
+            data[dataset_id]['labels'] = np.load(dataset_dict['labels'])
+            if tasks:
+                data[dataset_id]['labels'] = data[
+                    dataset_id]['labels'][:, task_idxs]
+
+    return data

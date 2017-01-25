@@ -44,6 +44,7 @@ def get_all_runs():
 
 def add_run(run_id, model_class, data_config_file_path, interval_config_file_path,
             model_config_file_path, log_directory):
+    assert isinstance(run_id, str)
     with _get_connection() as connection:
         with _get_cursor(connection) as cursor:
             cursor.execute("INSERT INTO {} (run_id, model_class, data_config_file_path, interval_config_file_path, model_config_file_path, log_directory) VALUES (%s, %s, %s, %s, %s, %s)".format(TABLE),

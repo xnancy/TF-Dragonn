@@ -54,7 +54,7 @@ def main():
     args = parser.parse_args()
 
     train_tf_dragonn(args.datasetspec, args.intervalspec,
-                     args.model_type, args.logdir, args.visiblegpus, args.tasks)
+                     args.model_type, args.logdir, args.visiblegpus)
 
 
 def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus):
@@ -77,7 +77,7 @@ def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus)
     logging.info('visiblegpus string: {}'.format(visiblegpus))
 
     logging.info('registering with tfdragonn database')
-    database.add_run(uuid.uuid4(), model_type, datasetspec,
+    database.add_run(str(uuid.uuid4()), model_type, datasetspec,
                      intervalspec, 'none_used', logdir)
 
     logging.info('Setting up readers')

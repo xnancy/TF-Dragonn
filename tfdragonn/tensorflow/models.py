@@ -56,7 +56,7 @@ class SequenceClassifier(Classifier):
     def get_inputs(self):
         return ["data/genome_data_dir"]
 
-    def __init__(self, num_tasks=1,
+    def __init__(self,
                  num_filters=(25, 25, 25), conv_width=(25, 25, 25),
                  pool_width=25, fc_layer_widths=(500,),
                  task_specific_fc_layer_widths=(80,), batch_norm=False):

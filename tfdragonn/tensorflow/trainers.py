@@ -25,7 +25,8 @@ class ClassiferTrainer(object):
         """Return a weights matrix with the same size as labels. Entries in labels
             equal to -1 are masked with `0`, all other values are `1`.
         """
-        assert(labels.dtype in [tf.int32, tf.int64])  # labels are always integers
+        assert(labels.dtype in [tf.int32, tf.int64]
+               )  # labels are always integers
         with tf.variable_scope(name):
             mask = tf.where(tf.equal(labels, -1), tf.zeros_like(labels, dtype=dtype),
                             tf.ones_like(labels, dtype=dtype))
@@ -41,7 +42,8 @@ class ClassiferTrainer(object):
 
     def get_loss(self, logits, labels, weights):
         with tf.variable_scope('loss'):
-            sigmoid_xentropy_loss = slim.losses.sigmoid_cross_entropy(logits, labels, weights=weights)
+            sigmoid_xentropy_loss = slim.losses.sigmoid_cross_entropy(
+                logits, labels, weights=weights)
             tf.summary.scalar('simoid-xentropy-loss', sigmoid_xentropy_loss)
 
             # this adds regularization if it's specified
@@ -62,7 +64,9 @@ class ClassiferTrainer(object):
 
     def train(self, model, examples_queue, train_log_dir, checkpoint=None,
               session_config=None, num_epochs=1):
-        logits, labels, loss, weights = self.get_logits_labels_loss_weights(model, examples_queue)
+        num_tasks = len(examples_queue.dataset_labels)
+        logits, labels, loss, weights = self.get_logits_labels_loss_weights(
+            model, examples_queue, num_tasks)
         task_names = examples_queue.task_names
         dataset_names = examples_queue.dataset_labels
         dataset_idxs = examples_queue.outputs['dataset-index']
@@ -77,7 +81,8 @@ class ClassiferTrainer(object):
 
         if checkpoint is not None:
             variables = slim.get_model_variables()
-            init_op, init_feeddict = slim.assign_from_checkpoint(checkpoint, variables)
+            init_op, init_feeddict = slim.assign_from_checkpoint(
+                checkpoint, variables)
 
             def InitAssignFn(sess):
                 sess.run(init_op, init_feeddict)
@@ -85,7 +90,8 @@ class ClassiferTrainer(object):
             InitAssignFn = None
 
         batch_size = dataset_idxs.get_shape()[0].value
-        self._current_step_limit += int(num_epochs * self.epoch_size / batch_size)
+        self._current_step_limit += int(num_epochs *
+                                        self.epoch_size / batch_size)
 
         slim.learning.train(
             train_op, train_log_dir, number_of_steps=self._current_step_limit,
@@ -99,7 +105,9 @@ class ClassiferTrainer(object):
         return checkpoint_fname
 
     def evaluate(self, model, examples_queue, num_evals, valid_log_dir, checkpoint, session_config=None):
-        logits, labels, loss, weights = self.get_logits_labels_loss_weights(model, examples_queue)
+        num_tasks = len(examples_queue.dataset_labels)
+        logits, labels, loss, weights = self.get_logits_labels_loss_weights(
+            model, examples_queue, num_tasks)
         task_names = examples_queue.task_names
         dataset_names = examples_queue.dataset_labels
         dataset_idxs = examples_queue.outputs['dataset-index']

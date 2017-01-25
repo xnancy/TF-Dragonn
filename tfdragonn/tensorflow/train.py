@@ -1,22 +1,29 @@
 #!/usr/bin/env python
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import argparse
 import os
 import logging
 import shutil
 import math
-import uuid
 
 import tensorflow as tf
 
 import database
+import models
+
 from dataset_interval_reader import get_train_readers_and_tasknames
 from dataset_interval_reader import get_valid_readers_and_tasknames
 from shared_examples_queue import SharedExamplesQueue
 from shared_examples_queue import ValidationSharedExamplesQueue
-import models
 from trainers import ClassiferTrainer
 from early_stopper import train_until_earlystop
+
+DIR_PREFIX = '/srv/scratch/tfbinding/'
+LOGDIR_PREFIX = '/srv/scratch/tfbinding/tf_logs/'
 
 HOLDOUT_CHROMS = ['chr1', 'chr8', 'chr21']
 VALID_CHROMS = ['chr9']
@@ -39,35 +46,45 @@ logger = logging.getLogger('train-wrapper')
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--datasetspec', type=str,
-                        required=True, help='Dataspec file')
-    parser.add_argument('--intervalspec', type=str,
-                        required=True, help='Intervalspec file')
-    parser.add_argument('--model_type', type=str, default='SequenceAndDnaseClassifier',
-                        help="""Which model to use.
-                                Supported options: SequenceAndDnaseClassifier, SequenceDnaseAndDnasePeaksCountsClassifier.
-                                Default: SequenceAndDnaseClassifier""")
-    parser.add_argument('--logdir', type=str, required=True,
-                        help='Logging directory')
+    parser.add_argument('dataset_params_file', type=os.path.abspath,
+                        help='Dataset parameters json file path')
+    parser.add_argument('interval_params_file', type=os.path.abspath,
+                        help='Interval parameters json file path')
+    parser.add_argument('model_params_file', type=os.path.abspath,
+                        help='Model parameters json file path')
+    parser.add_argument('logdir', type=os.path.abspath,
+                        help='Log directory, also used as globally unique run identifier')
     parser.add_argument('--visiblegpus', type=str,
                         required=True, help='Visible GPUs string')
     args = parser.parse_args()
 
-    train_tf_dragonn(args.datasetspec, args.intervalspec,
-                     args.model_type, args.logdir, args.visiblegpus)
+    train_tf_dragonn(args.dataset_params_file, args.interval_params_file,
+                     args.model_params_file, args.logdir, args.visiblegpus)
 
 
-def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus):
+def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
+    datasetspec = os.path.abspath(datasetspec)
     assert(os.path.isfile(datasetspec))
-    assert(os.path.isfile(intervalspec))
+    assert(datasetspec.startswith(DIR_PREFIX))
 
+    intervalspec = os.path.abspath(intervalspec)
+    assert(os.path.isfile(intervalspec))
+    assert(intervalspec.startswith(DIR_PREFIX))
+
+    modelspec = os.path.abspath(modelspec)
+    assert(os.path.isfile(modelspec))
+    assert(modelspec.startswith(DIR_PREFIX))
+
+    logdir = os.path.abspath(logdir)
     if os.path.isdir(logdir):  # remove empty directories for debugging
         if len(os.listdir(logdir)) == 0:
             shutil.rmtree(logdir)
     assert(not os.path.exists(logdir))
+    assert(logdir.startswith(LOGDIR_PREFIX))
     os.mkdir(logdir)
-    assert(os.path.isdir(logdir))
+    run_id = logdir.lstrip(LOGDIR_PREFIX)
+
     train_log_dir = os.path.join(logdir, TRAIN_DIRNAME)
     valid_log_dir = os.path.join(logdir, VALID_DIRNAME)
 
@@ -77,19 +94,17 @@ def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus)
     logging.info('visiblegpus string: {}'.format(visiblegpus))
 
     logging.info('registering with tfdragonn database')
-    database.add_run(str(uuid.uuid4()), model_type, datasetspec,
-                     intervalspec, 'none_used', logdir)
+    metadata = {}  # TODO(cprobert): save metadata here
+    database.add_run(run_id, datasetspec, intervalspec, modelspec, logdir, metadata)
 
     logging.info('Setting up readers')
 
-    def get_model(num_tasks):
-        model_class = getattr(models, model_type)
-        return model_class(num_tasks=num_tasks)
+    model = models.model_from_config(modelspec)
 
     session_config = tf.ConfigProto()
-    session_config.gpu_options.deferred_deletion_bytes = int(
-        250 * 1e6)  # 250MB
-    session_config.gpu_options.visible_device_list = visiblegpus
+    session_config.gpu_options.deferred_deletion_bytes = int(250 * 1e6)  # 250MB
+    session_config.gpu_options.visible_device_list = str(visiblegpus)
+    session_config.gpu_options.per_process_gpu_memory_fraction = 0.45  # allows 2 sessions/GPU
 
     trainer = ClassiferTrainer(epoch_size=EPOCH_SIZE)
 
@@ -100,11 +115,9 @@ def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus)
                 holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
             train_queue = SharedExamplesQueue(
                 train_readers, task_names, batch_size=BATCH_SIZE)
-            num_tasks = len(task_names)
-            train_model = get_model(num_tasks)
 
             new_checkpoint = trainer.train(
-                train_model, train_queue, train_log_dir, checkpoint, session_config, num_epochs)
+                model, train_queue, train_log_dir, checkpoint, session_config, num_epochs)
             return new_checkpoint
 
     def validate(checkpoint):
@@ -115,11 +128,9 @@ def train_tf_dragonn(datasetspec, intervalspec, model_type, logdir, visiblegpus)
             valid_queue = ValidationSharedExamplesQueue(
                 valid_readers, task_names, batch_size=BATCH_SIZE)
             num_batches = int(math.floor(num_valid_exs / BATCH_SIZE) - 1)
-            num_tasks = len(task_names)
-            valid_model = get_model(num_tasks)
 
             eval_metrics = trainer.evaluate(
-                valid_model, valid_queue, num_batches, valid_log_dir, checkpoint, session_config)
+                model, valid_queue, num_batches, valid_log_dir, checkpoint, session_config)
             return eval_metrics
 
     train_until_earlystop(

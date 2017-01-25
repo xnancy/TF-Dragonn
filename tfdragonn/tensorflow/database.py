@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import os.path
 import yaml
+import json
 
 import psycopg2
 
@@ -42,12 +43,13 @@ def get_all_runs():
     return results
 
 
-def add_run(run_id, model_class, data_config_file_path, interval_config_file_path,
-            model_config_file_path, log_directory):
+def add_run(run_id, data_config_file_path, interval_config_file_path,
+            model_config_file_path, log_directory, metadata={}):
+    metadata = json.dumps(metadata)  # json serialize
     assert isinstance(run_id, str)
     with _get_connection() as connection:
         with _get_cursor(connection) as cursor:
-            cursor.execute("INSERT INTO {} (run_id, model_class, data_config_file_path, interval_config_file_path, model_config_file_path, log_directory) VALUES (%s, %s, %s, %s, %s, %s)".format(TABLE),
-                           (run_id, model_class, data_config_file_path, interval_config_file_path,
-                            model_config_file_path, log_directory))
+            cursor.execute("INSERT INTO {} (run_id, data_config_file_path, interval_config_file_path, model_config_file_path, log_directory, metadata) VALUES (%s, %s, %s, %s, %s, %s)".format(TABLE),
+                           (log_directory, data_config_file_path, interval_config_file_path,
+                            model_config_file_path, log_directory, metadata))
             connection.commit()

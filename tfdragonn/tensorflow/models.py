@@ -1,10 +1,26 @@
 from __future__ import absolute_import, division, print_function
 
+import json
+import sys
+
 from abc import abstractmethod, abstractproperty, ABCMeta
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 import initializers
+
+
+def model_from_config(model_config_file_path):
+    """Load a model from a json config file."""
+    # TODO(jisraeli): this should support loading model parameters
+
+    thismodule = sys.modules[__name__]
+    with open(model_config_file_path, 'r') as fp:
+        config = json.load(fp)
+    model_class_name = config['model_class']
+
+    model_class = getattr(thismodule, model_class_name)
+    return model_class()
 
 
 class Classifier(object):
@@ -21,10 +37,6 @@ class Classifier(object):
     @abstractmethod
     def get_logits(inputs):
         pass
-
-    @property
-    def num_tasks(self):
-        return self._num_tasks
 
 
 def expand_4D(input_tensor):
@@ -44,7 +56,7 @@ class SequenceClassifier(Classifier):
     def get_inputs(self):
         return ["data/genome_data_dir"]
 
-    def __init__(self, num_tasks=1,
+    def __init__(self,
                  num_filters=(25, 25, 25), conv_width=(25, 25, 25),
                  pool_width=25, fc_layer_widths=(500,),
                  task_specific_fc_layer_widths=(80,), batch_norm=False):
@@ -102,7 +114,7 @@ class SequenceAndDnaseClassifier(Classifier):
     def get_inputs(self):
         return ["data/genome_data_dir", "data/dnase_data_dir"]
 
-    def __init__(self, num_tasks=1,
+    def __init__(self,
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
@@ -112,7 +124,6 @@ class SequenceAndDnaseClassifier(Classifier):
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
 
-        self._num_tasks = num_tasks
         self.num_seq_filters = num_seq_filters
         self.seq_conv_width = seq_conv_width
         self.num_dnase_filters = num_dnase_filters
@@ -125,7 +136,7 @@ class SequenceAndDnaseClassifier(Classifier):
         self.dropout = dropout
         self.batch_norm = batch_norm
 
-    def get_logits(self, inputs):
+    def get_logits(self, inputs, num_tasks):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
@@ -177,7 +188,7 @@ class SequenceAndDnaseClassifier(Classifier):
                     logits = slim.dropout(logits, self.dropout)
             if len(self.task_specific_fc_layer_widths) > 0:
                 task_specific_logits = []
-                for task_id in xrange(self.num_tasks):
+                for task_id in xrange(num_tasks):
                     task_specific_logits.append(
                         slim.stack(logits, slim.fully_connected, self.task_specific_fc_layer_widths,
                                    scope='fc_task{}'.format(task_id)))
@@ -200,7 +211,7 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
                 "data/dnase_data_dir",
                 "data/dnase_peaks_counts_data_dir"]
 
-    def __init__(self, num_tasks=1,
+    def __init__(self,
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
@@ -210,7 +221,6 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
 
-        self._num_tasks = num_tasks
         self.num_seq_filters = num_seq_filters
         self.seq_conv_width = seq_conv_width
         self.num_dnase_filters = num_dnase_filters
@@ -222,7 +232,7 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
-    def get_logits(self, inputs):
+    def get_logits(self, inputs, num_tasks):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
@@ -265,10 +275,10 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
                 filter_height = 2 if i == 0 else 1
                 filter_dims = [filter_height, filter_width]
                 seq_dnase_preds = slim.conv2d(seq_dnase_preds, num_filter, filter_dims, padding='VALID',
-                                     scope='combined_conv{:d}'.format(i + 1))
+                                              scope='combined_conv{:d}'.format(i + 1))
             print('after combined conv layers shape {}'.format(seq_dnase_preds.get_shape()))
             seq_dnase_preds = slim.avg_pool2d(seq_dnase_preds, [1, self.pool_width], stride=[1, self.pool_width],
-                                     padding='VALID', scope='avg_pool')
+                                              padding='VALID', scope='avg_pool')
             seq_dnase_preds = slim.flatten(seq_dnase_preds, scope='flatten')
             print('after flattening sequence and dnase shape {}'.format(seq_dnase_preds.get_shape()))
 
@@ -287,7 +297,7 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
             if len(self.final_fc_layer_widths) > 0:
                 logits = slim.stack(logits, slim.fully_connected, self.final_fc_layer_widths, scope='fc')
             logits = slim.fully_connected(
-                logits, self.num_tasks, activation_fn=None, scope='output-fc')
+                logits, num_tasks, activation_fn=None, scope='output-fc')
 
             return logits
 
@@ -304,7 +314,7 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
                 "data/gencode_polyA_distances_data_dir",
                 "data/gencode_lncRNA_distances_data_dir"]
 
-    def __init__(self, num_tasks=1,
+    def __init__(self,
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
@@ -315,7 +325,6 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
 
-        self._num_tasks = num_tasks
         self.num_seq_filters = num_seq_filters
         self.seq_conv_width = seq_conv_width
         self.num_dnase_filters = num_dnase_filters
@@ -323,13 +332,13 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
         self.num_combined_filters = num_combined_filters
         self.combined_conv_width = combined_conv_width
         self.peaks_counts_fc_layer_widths = peaks_counts_fc_layer_widths
-        self.pre_gencode_fc_layer_widths = pre_gencode_fc_layer_widths # everything but gencode features
-        self.gencode_fc_layer_widths = gencode_fc_layer_widths # gencode features only
-        self.final_fc_layer_widths = final_fc_layer_widths # everything
+        self.pre_gencode_fc_layer_widths = pre_gencode_fc_layer_widths  # everything but gencode features
+        self.gencode_fc_layer_widths = gencode_fc_layer_widths  # gencode features only
+        self.final_fc_layer_widths = final_fc_layer_widths  # everything
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
-    def get_logits(self, inputs):
+    def get_logits(self, inputs, num_tasks):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
@@ -372,10 +381,10 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
                 filter_height = 2 if i == 0 else 1
                 filter_dims = [filter_height, filter_width]
                 seq_dnase_preds = slim.conv2d(seq_dnase_preds, num_filter, filter_dims, padding='VALID',
-                                     scope='combined_conv{:d}'.format(i + 1))
+                                              scope='combined_conv{:d}'.format(i + 1))
             print('after combined conv layers shape {}'.format(seq_dnase_preds.get_shape()))
             seq_dnase_preds = slim.avg_pool2d(seq_dnase_preds, [1, self.pool_width], stride=[1, self.pool_width],
-                                     padding='VALID', scope='avg_pool')
+                                              padding='VALID', scope='avg_pool')
             seq_dnase_preds = slim.flatten(seq_dnase_preds, scope='flatten')
             print('after flattening sequence and dnase shape {}'.format(seq_dnase_preds.get_shape()))
 
@@ -390,15 +399,15 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
             logits = tf.concat(1, [seq_dnase_preds, peaks_counts_preds])
             print('concat peaks_counts_preds and seq_dnase_preds shape {}'.format(logits.get_shape()))
             if len(self.pre_gencode_fc_layer_widths) > 0:
-                logits =slim.stack(logits, slim.fully_connected, self.pre_gencode_fc_layer_widths, scope='fc_pre_gencode')
+                logits = slim.stack(logits, slim.fully_connected, self.pre_gencode_fc_layer_widths, scope='fc_pre_gencode')
 
             # fully connect gencode features
             gencode_preds = tf.concat(1, [inputs["data/gencode_tss_distances_data_dir"],
                                           inputs["data/gencode_annotation_distances_data_dir"],
                                           inputs["data/gencode_polyA_distances_data_dir"],
                                           inputs["data/gencode_lncRNA_distances_data_dir"]])
-            gencode_preds = tf.squeeze(gencode_preds) # remove extranous dimension
-            gencode_preds = tf.log(1 + gencode_preds) # take log of distances
+            gencode_preds = tf.squeeze(gencode_preds)  # remove extranous dimension
+            gencode_preds = tf.log(1 + gencode_preds)  # take log of distances
             if len(self.gencode_fc_layer_widths) > 0:
                 gencode_preds = slim.stack(gencode_preds, slim.fully_connected, self.gencode_fc_layer_widths, scope='fc_gencode')
 
@@ -407,6 +416,6 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
             if len(self.final_fc_layer_widths) > 0:
                 logits = slim.stack(logits, slim.fully_connected, self.final_fc_layer_widths, scope='fc')
             logits = slim.fully_connected(
-                logits, self.num_tasks, activation_fn=None, scope='output-fc')
+                logits, num_tasks, activation_fn=None, scope='output-fc')
 
             return logits

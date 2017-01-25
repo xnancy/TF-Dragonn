@@ -12,10 +12,14 @@ from tfdragonn import train
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('dataset_params_file', type=os.path.abspath)
-    parser.add_argument('interval_params_file', type=os.path.abspath)
-    parser.add_argument('model_params_file', type=os.path.abspath)
-    parser.add_argument('logdir', type=str)
+    parser.add_argument('dataset_params_file', type=os.path.abspath,
+                        help='Dataset parameters json file path')
+    parser.add_argument('interval_params_file', type=os.path.abspath,
+                        help='Interval parameters json file path')
+    parser.add_argument('model_params_file', type=os.path.abspath,
+                        help='Model parameters json file path')
+    parser.add_argument('logdir', type=os.path.abspath,
+                        help='Log directory, also used as globally unique run identifier')
     args = parser.parse_args()
 
     submit_train_task(args.dataset_params_file, args.interval_params_file,

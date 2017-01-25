@@ -6,10 +6,10 @@ from collections import defaultdict
 import tensorflow as tf
 import numpy as np
 
-from .examples_queue import examples_queue
-from .interval_queue import interval_queue
-from .bcolz_reader_op import bcolz_interval_reader
-from .datasets import parse_inputs_and_intervals
+from examples_queue import examples_queue
+from interval_queue import interval_queue
+from bcolz_reader_op import bcolz_interval_reader
+from datasets import parse_inputs_and_intervals
 
 """
 Primary interface for I/O for one or more datasets.

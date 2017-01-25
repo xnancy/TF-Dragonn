@@ -5,14 +5,12 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import time
 import yaml
-import sys
 
 from celery import Celery
 
 
-# from train import train_tf_dragonn
+from train import train_tf_dragonn
 
 """
 A Celery worker app for training a tf-dragonn model.
@@ -41,8 +39,7 @@ app = Celery('tfdragonn', broker=broker)
 
 @app.task
 def train(dataset_params_file, interval_params_file, model_params_file, logdir):
-    print("running task on gpu: {}".format(get_gpu()))
-    time.sleep(3)
-    print((dataset_params_file, interval_params_file, model_params_file, logdir))
-    # train_tf_dragonn(dataset_params_file, interval_params_file,
-    #                  model_params_file, logdir, args.visiblegpus, args.tasks)
+    gpu_to_use = get_gpu()
+    print("running task on gpu: {}".format(gpu_to_use))
+    train_tf_dragonn(dataset_params_file, interval_params_file,
+                     model_params_file, logdir, gpu_to_use)

@@ -1,10 +1,26 @@
 from __future__ import absolute_import, division, print_function
 
+import json
+import sys
+
 from abc import abstractmethod, abstractproperty, ABCMeta
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 import initializers
+
+
+def model_from_config(model_config_file_path):
+    """Load a model from a json config file."""
+    # TODO(jisraeli): this should support loading model parameters
+
+    thismodule = sys.modules[__name__]
+    with open(model_config_file_path, 'r') as fp:
+        config = json.load(fp)
+    model_class_name = config['model_class']
+
+    model_class = getattr(thismodule, model_class_name)
+    return model_class()
 
 
 class Classifier(object):

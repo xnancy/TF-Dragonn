@@ -63,7 +63,6 @@ class SequenceClassifier(Classifier):
                  task_specific_fc_layer_widths=(80,), batch_norm=False):
         assert len(num_filters) == len(conv_width)
 
-        self._num_tasks = num_tasks
         self.num_filters = num_filters
         self.conv_width = conv_width
         self.fc_layer_widths = fc_layer_widths
@@ -71,7 +70,7 @@ class SequenceClassifier(Classifier):
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
-    def get_logits(self, inputs):
+    def get_logits(self, inputs, num_tasks):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
@@ -104,7 +103,7 @@ class SequenceClassifier(Classifier):
                 logits = tf.concat(1, task_specific_seq_preds)
             else:
                 logits = slim.fully_connected(
-                    seq_preds, self.num_tasks, activation_fn=None, scope='output-fc')
+                    seq_preds, num_tasks, activation_fn=None, scope='output-fc')
 
             return logits
 

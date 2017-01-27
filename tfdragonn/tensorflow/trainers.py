@@ -52,11 +52,11 @@ class ClassiferTrainer(object):
 
             return total_loss
 
-    def get_logits_labels_loss_weights(self, model, examples_queue):
+    def get_logits_labels_loss_weights(self, model, examples_queue, num_tasks):
         inputs = examples_queue.outputs
         labels = inputs["labels"]
 
-        logits = model.get_logits(inputs)
+        logits = model.get_logits(inputs, num_tasks)
         weights = self.get_weights(inputs)
         loss = self.get_loss(logits, labels, weights)
 
@@ -64,7 +64,7 @@ class ClassiferTrainer(object):
 
     def train(self, model, examples_queue, train_log_dir, checkpoint=None,
               session_config=None, num_epochs=1):
-        num_tasks = len(examples_queue.dataset_labels)
+        num_tasks = len(examples_queue.task_names)
         logits, labels, loss, weights = self.get_logits_labels_loss_weights(
             model, examples_queue, num_tasks)
         task_names = examples_queue.task_names
@@ -105,7 +105,7 @@ class ClassiferTrainer(object):
         return checkpoint_fname
 
     def evaluate(self, model, examples_queue, num_evals, valid_log_dir, checkpoint, session_config=None):
-        num_tasks = len(examples_queue.dataset_labels)
+        num_tasks = len(examples_queue.task_names)
         logits, labels, loss, weights = self.get_logits_labels_loss_weights(
             model, examples_queue, num_tasks)
         task_names = examples_queue.task_names

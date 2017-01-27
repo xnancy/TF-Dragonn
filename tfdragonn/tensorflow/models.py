@@ -20,7 +20,8 @@ def model_from_config(model_config_file_path):
     model_class_name = config['model_class']
 
     model_class = getattr(thismodule, model_class_name)
-    return model_class()
+    del config['model_class']
+    return model_class(**config)
 
 
 class Classifier(object):

@@ -20,7 +20,8 @@ def model_from_config(model_config_file_path):
     model_class_name = config['model_class']
 
     model_class = getattr(thismodule, model_class_name)
-    return model_class()
+    del config['model_class']
+    return model_class(**config)
 
 
 class Classifier(object):
@@ -59,19 +60,25 @@ class SequenceClassifier(Classifier):
     def __init__(self,
                  num_filters=(25, 25, 25), conv_width=(25, 25, 25),
                  pool_width=25, fc_layer_widths=(500,),
-                 task_specific_fc_layer_widths=(80,), batch_norm=False):
+                 task_specific_fc_layer_widths=(80,),
+                 conv_dropout=0,
+                 fc_layer_dropout=0.2,
+                 batch_norm=True):
         assert len(num_filters) == len(conv_width)
 
         self.num_filters = num_filters
         self.conv_width = conv_width
+        self.pool_width = pool_width
         self.fc_layer_widths = fc_layer_widths
         self.task_specific_fc_layer_widths = task_specific_fc_layer_widths
-        self.pool_width = pool_width
+        self.conv_dropout = conv_dropout
+        self.fc_layer_dropout = fc_layer_dropout
         self.batch_norm = batch_norm
 
     def get_logits(self, inputs, num_tasks):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
+                normalizer_fn=slim.batch_norm if self.batch_norm else None,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
 
@@ -83,26 +90,31 @@ class SequenceClassifier(Classifier):
                 filter_dims = [filter_height, filter_width]
                 seq_preds = slim.conv2d(seq_preds, num_filter, filter_dims, padding='VALID',
                                         scope='sequence_conv{:d}'.format(i + 1))
+                if self.conv_dropout > 0:
+                    seq_preds = slim.dropout(seq_preds, self.conv_dropout)
 
             print('shape after conv layers, before pooling: {}'.format(seq_preds.get_shape()))
             seq_preds = slim.avg_pool2d(seq_preds, [1, self.pool_width], stride=[1, self.pool_width],
                                      padding='VALID', scope='avg_pool')
             seq_preds = slim.flatten(seq_preds, scope='flatten')
-            if len(self.fc_layer_widths) > 0:
-                seq_preds = slim.stack(seq_preds, slim.fully_connected, self.fc_layer_widths, scope='fc')
+            for i, fc_layer_width in enumerate(self.fc_layer_widths):
+                seq_preds = slim.fully_connected(seq_preds, fc_layer_width, scope='fc{}'.format(i + 1))
+                if self.fc_layer_dropout > 0:
+                    seq_preds = slim.dropout(seq_preds, self.fc_layer_dropout)
+
             if len(self.task_specific_fc_layer_widths) > 0:
                 task_specific_seq_preds = []
-                for task_id in xrange(self.num_tasks):
+                for task_id in xrange(num_tasks):
                     task_specific_seq_preds.append(
                         slim.stack(seq_preds, slim.fully_connected, self.task_specific_fc_layer_widths,
                                    scope='fc_task{}'.format(task_id)))
                     task_specific_seq_preds[-1] = slim.fully_connected(
-                        task_specific_seq_preds[-1], 1, activation_fn=None,
+                        task_specific_seq_preds[-1], 1, activation_fn=None, normalizer_fn=None,
                         scope='logit{}'.format(task_id))
                 logits = tf.concat(1, task_specific_seq_preds)
             else:
                 logits = slim.fully_connected(
-                    seq_preds, num_tasks, activation_fn=None, scope='output-fc')
+                    seq_preds, num_tasks, activation_fn=None, normalizer_fn=None, scope='output-fc')
 
             return logits
 
@@ -117,8 +129,14 @@ class SequenceAndDnaseClassifier(Classifier):
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
-                 pool_width=25, fc_layer_widths=(100,),
-                 task_specific_fc_layer_widths=(), batch_norm=False):
+                 pool_width=25,
+                 fc_layer_widths=(100,),
+                 task_specific_fc_layer_widths=(),
+                 seq_conv_dropout=0,
+                 dnase_conv_dropout=0,
+                 combined_conv_dropout=0,
+                 fc_layer_dropout=0.2,
+                 batch_norm=True):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
@@ -132,23 +150,18 @@ class SequenceAndDnaseClassifier(Classifier):
         self.fc_layer_widths = fc_layer_widths
         self.task_specific_fc_layer_widths = task_specific_fc_layer_widths
         self.pool_width = pool_width
+        self.seq_conv_dropout = seq_conv_dropout
+        self.dnase_conv_dropout = dnase_conv_dropout
+        self.combined_conv_dropout = combined_conv_dropout
+        self.fc_layer_dropout = fc_layer_dropout
         self.batch_norm = batch_norm
 
     def get_logits(self, inputs, num_tasks):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
+                normalizer_fn=slim.batch_norm if self.batch_norm else None,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
-
-            def expand_4D(input_tensor):
-                shape = [x.value for x in input_tensor.get_shape()]
-                if len(shape) == 2:  # 1-D input
-                    new_shape = [shape[0], 1, shape[1], 1]
-                elif len(shape) == 3:  # 2-D input
-                    new_shape = shape + [1]
-                else:
-                    raise IOError('unrecognized shape: {}'.format(shape))
-                return tf.reshape(input_tensor, new_shape)
 
             seq_preds = inputs["data/genome_data_dir"]
             seq_preds = expand_4D(seq_preds)
@@ -158,6 +171,8 @@ class SequenceAndDnaseClassifier(Classifier):
                 filter_dims = [filter_height, filter_width]
                 seq_preds = slim.conv2d(seq_preds, num_filter, filter_dims, padding='VALID',
                                         scope='sequence_conv{:d}'.format(i + 1))
+                if self.seq_conv_dropout > 0:
+                    seq_preds = slim.dropout(seq_preds, self.seq_conv_dropout)
 
             dnase_preds = inputs["data/dnase_data_dir"]
             dnase_preds = expand_4D(dnase_preds)
@@ -166,6 +181,8 @@ class SequenceAndDnaseClassifier(Classifier):
                 fitler_dims = [1, filter_width]
                 dnase_preds = slim.conv2d(dnase_preds, num_filter, fitler_dims, padding='VALID',
                                           scope='dnase_conv{:d}'.format(i + 1))
+                if self.dnase_conv_dropout > 0:
+                    dnase_preds = slim.dropout(dnase_preds, self.combined_conv_dropout)
 
             # check if concatenation axis is correct
             print('seq_preds shape {}'.format(seq_preds.get_shape()))
@@ -178,12 +195,18 @@ class SequenceAndDnaseClassifier(Classifier):
                 filter_dims = [filter_height, filter_width]
                 logits = slim.conv2d(logits, num_filter, filter_dims, padding='VALID',
                                      scope='combined_conv{:d}'.format(i + 1))
+                if self.combined_conv_dropout > 0:
+                    logits = slim.dropout(logits, self.combined_conv_dropout)
+
             print('after combined conv layers shape {}'.format(logits.get_shape()))
             logits = slim.avg_pool2d(logits, [1, self.pool_width], stride=[1, self.pool_width],
                                      padding='VALID', scope='avg_pool')
             logits = slim.flatten(logits, scope='flatten')
-            if len(self.fc_layer_widths) > 0:
-                logits = slim.stack(logits, slim.fully_connected, self.fc_layer_widths, scope='fc')
+            for i, fc_layer_width in enumerate(self.fc_layer_widths):
+                logits = slim.fully_connected(logits, fc_layer_width, scope='fc{}'.format(i + 1))
+                if self.fc_layer_dropout > 0:
+                    logits = slim.dropout(logits, self.fc_layer_dropout)
+
             if len(self.task_specific_fc_layer_widths) > 0:
                 task_specific_logits = []
                 for task_id in xrange(num_tasks):
@@ -191,12 +214,12 @@ class SequenceAndDnaseClassifier(Classifier):
                         slim.stack(logits, slim.fully_connected, self.task_specific_fc_layer_widths,
                                    scope='fc_task{}'.format(task_id)))
                     task_specific_logits[-1] = slim.fully_connected(
-                        task_specific_logits[-1], 1, activation_fn=None,
+                        task_specific_logits[-1], 1, activation_fn=None, normalizer_fn=None,
                         scope='logit{}'.format(task_id))
                 logits = tf.concat(1, task_specific_logits)
             else:
                 logits = slim.fully_connected(
-                    logits, num_tasks, activation_fn=None, scope='output-fc')
+                    logits, num_tasks, activation_fn=None, normalizer_fn=None, scope='output-fc')
 
             return logits
 
@@ -235,16 +258,6 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
-
-            def expand_4D(input_tensor):
-                shape = [x.value for x in input_tensor.get_shape()]
-                if len(shape) == 2:  # 1-D input
-                    new_shape = [shape[0], 1, shape[1], 1]
-                elif len(shape) == 3:  # 2-D input
-                    new_shape = shape + [1]
-                else:
-                    raise IOError('unrecognized shape: {}'.format(shape))
-                return tf.reshape(input_tensor, new_shape)
 
             seq_preds = inputs["data/genome_data_dir"]
             seq_preds = expand_4D(seq_preds)
@@ -341,16 +354,6 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
-
-            def expand_4D(input_tensor):
-                shape = [x.value for x in input_tensor.get_shape()]
-                if len(shape) == 2:  # 1-D input
-                    new_shape = [shape[0], 1, shape[1], 1]
-                elif len(shape) == 3:  # 2-D input
-                    new_shape = shape + [1]
-                else:
-                    raise IOError('unrecognized shape: {}'.format(shape))
-                return tf.reshape(input_tensor, new_shape)
 
             seq_preds = inputs["data/genome_data_dir"]
             seq_preds = expand_4D(seq_preds)

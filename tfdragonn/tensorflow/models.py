@@ -36,7 +36,7 @@ class Classifier(object):
         pass
 
     @abstractmethod
-    def get_logits(inputs):
+    def get_logits(inputs, num_tasks, is_training=True):
         pass
 
 
@@ -75,7 +75,7 @@ class SequenceClassifier(Classifier):
         self.fc_layer_dropout = fc_layer_dropout
         self.batch_norm = batch_norm
 
-    def get_logits(self, inputs, num_tasks):
+    def get_logits(self, inputs, num_tasks, is_training=True):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
@@ -156,7 +156,7 @@ class SequenceAndDnaseClassifier(Classifier):
         self.fc_layer_dropout = fc_layer_dropout
         self.batch_norm = batch_norm
 
-    def get_logits(self, inputs, num_tasks):
+    def get_logits(self, inputs, num_tasks, is_training=True):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
@@ -253,7 +253,7 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
-    def get_logits(self, inputs, num_tasks):
+    def get_logits(self, inputs, num_tasks, is_training=True):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
@@ -349,7 +349,7 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
-    def get_logits(self, inputs, num_tasks):
+    def get_logits(self, inputs, num_tasks, is_training=True):
         with slim.arg_scope(
                 [slim.conv2d, slim.fully_connected], reuse=False, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),

@@ -11,14 +11,12 @@ import shutil
 import math
 
 import tensorflow as tf
+import genomeflow as gf
 
 import database
 import models
+import datasets
 
-from dataset_interval_reader import get_train_readers_and_tasknames
-from dataset_interval_reader import get_valid_readers_and_tasknames
-from shared_examples_queue import SharedExamplesQueue
-from shared_examples_queue import ValidationSharedExamplesQueue
 from trainers import ClassiferTrainer
 from early_stopper import train_until_earlystop
 
@@ -72,6 +70,9 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     assert(os.path.isfile(intervalspec))
     assert(intervalspec.startswith(DIR_PREFIX))
 
+    training_dataset, validation_dataset = datasets.parse_inputs_and_intervals(
+        datasetspec, intervalspec)
+
     modelspec = os.path.abspath(modelspec)
     assert(os.path.isfile(modelspec))
     assert(modelspec.startswith(DIR_PREFIX))
@@ -95,39 +96,64 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
     logging.info('registering with tfdragonn database')
     metadata = {}  # TODO(cprobert): save metadata here
-    database.add_run(run_id, datasetspec, intervalspec, modelspec, logdir, metadata)
+    database.add_run(run_id, datasetspec, intervalspec,
+                     modelspec, logdir, metadata)
 
     logging.info('Setting up readers')
 
     model = models.model_from_config(modelspec)
 
     session_config = tf.ConfigProto()
-    session_config.gpu_options.deferred_deletion_bytes = int(250 * 1e6)  # 250MB
+    session_config.gpu_options.deferred_deletion_bytes = int(
+        250 * 1e6)  # 250MB
     session_config.gpu_options.visible_device_list = str(visiblegpus)
-    session_config.gpu_options.per_process_gpu_memory_fraction = 0.45  # allows 2 sessions/GPU
+    # allows 2 sessions/GPU
+    session_config.gpu_options.per_process_gpu_memory_fraction = 0.45
 
     trainer = ClassiferTrainer(epoch_size=EPOCH_SIZE)
 
-    def train(checkpoint=None, num_epochs=1):
-        with tf.Graph().as_default():
-            train_readers, task_names = get_train_readers_and_tasknames(
-                datasetspec, intervalspec, validation_chroms=VALID_CHROMS,
-                holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
-            train_queue = SharedExamplesQueue(
-                train_readers, task_names, batch_size=BATCH_SIZE)
+    with tf.Graph().as_default():
+        with tf.variable_scope('GenomeDataIO'):
+            examples_queues = {}
+            for dataset_id, dataset_fields in training_dataset.items():
 
-            new_checkpoint = trainer.train(
-                model, train_queue, train_log_dir, checkpoint, session_config, num_epochs)
-            return new_checkpoint
+                intervals = dataset_fields['intervals']
+                inputs = dataset_fields['inputs']
+                labels = dataset_fields['labels']
+                task_names = dataset_fields['task_names']
+
+                interval_queue = gf.io.IntervalQueue(
+                    intervals, labels, name='{}-interval-queue'.format(dataset_id),
+                    capacity=10000, shuffle=False, summary=True)
+
+                data_sources = {}
+                for data_type, data_path in inputs.items():
+                    if data_type in {'genome_data_dir', 'dnase_data_dir'}:
+                        data_sources[data_type] = gf.io.DataSource(data_path, 'bcolz')
+                    else:
+                        data_sources[data_type] = gf.io.DataSource(
+                            data_path, 'bed',
+                            {'op': 'max', 'window_half_widths': [1000, 10000]})
+
+                examples_queues[dataset_id] = gf.io.ExampleQueue(
+                    interval_queue, data_sources, num_threads=1,
+                    enqueue_batch_size=128, capacity=2048,
+                    name='{}-example-queue'.format(dataset_id))
+
+            shared_examples_queue = gf.io.MultiDatasetExampleQueue(
+                examples_queues, num_threads=1, enqueue_batch_size=128,
+                capacity=2048, name='multi-dataset-example-queue')
+
+            examples = shared_examples_queue.dequeue_many(BATCH_SIZE)
+
+
+
+    def train(checkpoint=None, num_epochs=1):
+        new_checkpoint = trainer.train(
+            model, train_queue, train_log_dir, checkpoint, session_config, num_epochs)
+        return new_checkpoint
 
     def validate(checkpoint):
-        with tf.Graph().as_default():
-            valid_readers, task_names, num_valid_exs = get_valid_readers_and_tasknames(
-                datasetspec, intervalspec, validation_chroms=VALID_CHROMS,
-                holdout_chroms=HOLDOUT_CHROMS, in_memory=IN_MEMORY)
-            valid_queue = ValidationSharedExamplesQueue(
-                valid_readers, task_names, batch_size=BATCH_SIZE)
-            num_batches = int(math.floor(num_valid_exs / BATCH_SIZE) - 1)
 
             eval_metrics = trainer.evaluate(
                 model, valid_queue, num_batches, valid_log_dir, checkpoint, session_config)

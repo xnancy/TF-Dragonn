@@ -21,10 +21,21 @@ raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
                              'gencode_lncRNA': 'gencode_lncRNA_distances_data_dir',
                              'gencode_tRNA': 'gencode_tRNA_distances_data_dir',
                              'expression_tsv': 'expression_data_dir'}
+processed_input_2_extractor = {
+    'genome_data_dir': 'bcolz_array',
+    'dnase_data_dir': 'bcolz_array',
+    'dnase_peaks_counts_data_dir': 'bed',
+    'gencode_tss_peaks_counts_data_dir': 'bed',
+    'gencode_annotation_distances_data_dir': 'bed',
+    'gencode_polyA_distances_data_dir': 'bed',
+    'gencode_lncRNA_distances_data_dir': 'bed',
+    'gencode_tRNA_distances_data_dir': 'bed',
+    'expression_data_dir': 'bed',
+}
 PROCESSED_INPUT_NAMES = set(raw_input2processed_input.values())
 
 
-def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file, tasks=None):
+def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
     """Parse the processed inputs and intervals files, return a dataset dictionary."""
 
     all_datasets = {}
@@ -75,6 +86,43 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file, 
 
     return dataset
 
+
+def parse_inputs_and_intervals_with_holdout(processed_inputs_file, processed_intervals_file,
+                                            validation_chroms=[], holdout_chroms=[]):
+    dataset = parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file)
+    train_dataset = {}
+    valid_dataset = {}
+
+    for dataset_id, dataset_fields in dataset.items():
+
+        intervals = dataset_fields['intervals']
+        inputs = dataset_fields['inputs']
+        task_names = dataset_fields['task_names']
+        labels = dataset_fields.get('labels', None)
+
+        validation_idxs = np.in1d(intervals['chrom'], validation_chroms)
+        holdout_idxs = np.in1d(intervals['chrom'], holdout_chroms)
+        train_idxs = ~ np.logical_or(validation_idxs, holdout_idxs)
+
+        train_dataset[dataset_id] = {
+            'task_names': task_names,
+            'inputs': inputs,
+        }
+        train_dataset[dataset_id]['intervals'] = {k: intervals[k][train_idxs]
+                                                  for k in ['chrom', 'start', 'end']}
+        if labels is not None:
+            train_dataset[dataset_id]['labels'] = labels[train_idxs]
+
+        valid_dataset[dataset_id] = {
+            'task_names': task_names,
+            'inputs': inputs,
+        }
+        valid_dataset[dataset_id]['intervals'] = {k: intervals[k][validation_idxs]
+                                                  for k in ['chrom', 'start', 'end']}
+        if labels is not None:
+            valid_dataset[dataset_id]['labels'] = labels[validation_idxs]
+
+    return train_dataset, valid_dataset
 
 def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
     """parses raw inputs file, returns inputs dictionary"""

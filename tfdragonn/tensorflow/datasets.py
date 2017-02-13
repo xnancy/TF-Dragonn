@@ -53,16 +53,6 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
         data = json.load(fp)
     task_names = data['task_names']
 
-    # Allow loading only a subset of tasks
-    if tasks:
-        task2idx = {i: t for i, t in enumerate(task_names)}
-        for t_name in tasks:
-            if t_name not in task2idx:
-                raise ValueError('Task {} was not found in intervals file {}'.format(
-                    t_name, processed_intervals_file))
-        task_idxs = np.array([task2idx[t] for t in tasks])
-        task_names = tasks
-
     for dataset_id, dataset_dict in data.items():
 
         if dataset_id == 'task_names':
@@ -75,9 +65,6 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
 
         if 'labels' in dataset_dict.keys():
             dataset[dataset_id]['labels'] = np.load(dataset_dict['labels'])
-            if tasks:
-                dataset[dataset_id]['labels'] = dataset[
-                    dataset_id]['labels'][:, task_idxs]
 
         bt = BedTool(dataset_dict['regions'])
         intervals_dict = {k: bt.to_dataframe()[k].as_matrix() for k in [

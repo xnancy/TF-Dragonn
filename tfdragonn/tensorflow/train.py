@@ -8,14 +8,14 @@ import argparse
 import os
 import logging
 import shutil
-import math
 
+import numpy as np
 import tensorflow as tf
 import genomeflow as gf
 
 import database
 import models
-import datasets
+import genomeflow_interface
 
 from trainers import ClassiferTrainer
 from early_stopper import train_until_earlystop
@@ -70,9 +70,6 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     assert(os.path.isfile(intervalspec))
     assert(intervalspec.startswith(DIR_PREFIX))
 
-    training_dataset, validation_dataset = datasets.parse_inputs_and_intervals(
-        datasetspec, intervalspec)
-
     modelspec = os.path.abspath(modelspec)
     assert(os.path.isfile(modelspec))
     assert(modelspec.startswith(DIR_PREFIX))
@@ -112,51 +109,26 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
     trainer = ClassiferTrainer(epoch_size=EPOCH_SIZE)
 
-    with tf.Graph().as_default():
-        with tf.variable_scope('GenomeDataIO'):
-            examples_queues = {}
-            for dataset_id, dataset_fields in training_dataset.items():
+    data_interface = genomeflow_interface.GenomeFlowInterface(
+        datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
 
-                intervals = dataset_fields['intervals']
-                inputs = dataset_fields['inputs']
-                labels = dataset_fields['labels']
-                task_names = dataset_fields['task_names']
-
-                interval_queue = gf.io.IntervalQueue(
-                    intervals, labels, name='{}-interval-queue'.format(dataset_id),
-                    capacity=10000, shuffle=False, summary=True)
-
-                data_sources = {}
-                for data_type, data_path in inputs.items():
-                    if data_type in {'genome_data_dir', 'dnase_data_dir'}:
-                        data_sources[data_type] = gf.io.DataSource(data_path, 'bcolz')
-                    else:
-                        data_sources[data_type] = gf.io.DataSource(
-                            data_path, 'bed',
-                            {'op': 'max', 'window_half_widths': [1000, 10000]})
-
-                examples_queues[dataset_id] = gf.io.ExampleQueue(
-                    interval_queue, data_sources, num_threads=1,
-                    enqueue_batch_size=128, capacity=2048,
-                    name='{}-example-queue'.format(dataset_id))
-
-            shared_examples_queue = gf.io.MultiDatasetExampleQueue(
-                examples_queues, num_threads=1, enqueue_batch_size=128,
-                capacity=2048, name='multi-dataset-example-queue')
-
-            examples = shared_examples_queue.dequeue_many(BATCH_SIZE)
-
-
+    num_validation_batches = int(np.floor(
+        data_interface.num_validation_exs / BATCH_SIZE))
 
     def train(checkpoint=None, num_epochs=1):
-        new_checkpoint = trainer.train(
-            model, train_queue, train_log_dir, checkpoint, session_config, num_epochs)
-        return new_checkpoint
+        with tf.Graph().as_default():
+            train_queue = data_interface.get_train_queue()
+            new_checkpoint = trainer.train(
+                model, train_queue, train_log_dir, checkpoint,
+                session_config, num_epochs)
+            return new_checkpoint
 
     def validate(checkpoint):
-
+        with tf.Graph().as_default():
+            validation_queue = data_interface.get_validation_queue()
             eval_metrics = trainer.evaluate(
-                model, valid_queue, num_batches, valid_log_dir, checkpoint, session_config)
+                model, validation_queue, num_validation_batches,
+                valid_log_dir, checkpoint, session_config)
             return eval_metrics
 
     train_until_earlystop(

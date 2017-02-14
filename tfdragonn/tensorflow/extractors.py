@@ -48,8 +48,8 @@ def extract_expression_to_file(datafile, output_dir, components_file, replicate_
                    'source': datafile}, fp)
 
 
-def write_tss_expression_bedgraph(tss_gff, expression_tsv, output_dir,
-                                  expression_tsv2=None, overwrite=False):
+def write_tss_tpm_bed(tss_gff, expression_tsv, output_dir,
+                      expression_tsv2=None, overwrite=False):
     """
     Writes bedGraph file with tss intervals and their expression TPMs in the 4th column.
 
@@ -82,7 +82,7 @@ def write_tss_expression_bedgraph(tss_gff, expression_tsv, output_dir,
     gene_id2tpm = {gene_id: float(tpm) for gene_id, tpm in np.hstack((gene_ids, tpm))}
     intervals = [Interval(interval.chrom, interval.start, interval.stop, str(gene_id2tpm[gene_id]))
                  for interval, gene_id in zip(tss_bedtool, bedtool_gene_ids)]
-    BedTool(intervals).saveas(os.path.join(output_dir, "data.bedGraph"))
+    BedTool(intervals).saveas(os.path.join(output_dir, "tss_tpm.bed"))
 
     with open(os.path.join(output_dir, 'metadata.json'), 'w') as fp:
         json.dump({'type': 'intervals_data_bed',

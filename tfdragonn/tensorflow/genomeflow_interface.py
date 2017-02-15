@@ -6,15 +6,29 @@ import genomeflow as gf
 
 import datasets
 
-Datatype2Extractor = {
-    'genome_data_dir': 'bcolz',
-    'dnase_data_dir': 'bcolz',
-    'gencode_tss': 'bed',
-    'gencode_annotation': 'bed',
-    'gencode_polyA': 'bed',
-    'gencode_lncRNA': 'bed',
-    'gencode_tRNA': 'bed',
-    'expression_tsv': 'bed',
+data_type2extractor = {
+    'genome_data_dir': 'bcolz_array',
+    'dnase_data_dir': 'bcolz_array',
+    'tss_counts': 'bed',
+    'dhs_counts': 'bed',
+    'tss_mean_tpm': 'bed',
+    'tss_max_tpm': 'bed'
+}
+data_type2options = {
+    'tss_counts': {
+        'op': 'count'
+    },
+    'dhs_counts': {
+        'op': 'count'
+    },
+    'tss_mean_tpm': {
+        'op': 'mean',
+        'norm_params': 'asinh_zscore'
+    },
+    'tss_max_tpm': {
+        'op': 'max',
+        'norm_params': 'asinh_zscore'
+    }
 }
 
 
@@ -32,10 +46,10 @@ class GenomeFlowInterface(object):
                 validation_chroms, holdout_chroms)
 
         self.num_train_exs = sum(
-            self.training_dataset[k]['intervals'].shape[0]
+            self.training_dataset[k]['intervals']['chrom'].shape[0]
             for k in self.training_dataset.keys())
         self.num_validation_exs = sum(
-            self.validation_dataset[k]['intervals'].shape[0]
+            self.validation_dataset[k]['intervals']['chrom'].shape[0]
             for k in self.validation_dataset.keys())
 
     def get_train_queue(self):
@@ -53,18 +67,16 @@ class GenomeFlowInterface(object):
         return shared_examples_queue
 
     def get_example_queue(self, dataset, dataset_id, num_epochs=None):
-        dataset_fields = dataset[dataset_id]
-
-        intervals = dataset_fields['intervals']
-        inputs = dataset_fields['inputs']
-        labels = dataset_fields['labels']
-        self.task_names = dataset_fields['task_names']
+        intervals = dataset['intervals']
+        inputs = dataset['inputs']
+        labels = dataset['labels']
+        self.task_names = dataset['task_names']
 
         interval_queue = gf.io.IntervalQueue(
             intervals, labels, name='{}-interval-queue'.format(dataset_id),
             num_epochs=num_epochs, capacity=10000, shuffle=False, summary=True)
 
-        data_sources = {k: self.get_data_source(v) for k, v in inputs.items()}
+        data_sources = {k: self.get_data_source(k, v) for k, v in inputs.items()}
 
         examples_queue = gf.io.ExampleQueue(
             interval_queue, data_sources, num_threads=1,
@@ -79,11 +91,16 @@ class GenomeFlowInterface(object):
             capacity=2048, name='multi-dataset-example-queue')
         return shared_examples_queue
 
-    def get_data_source(self, data_type, data_path):
-        # TODO: this should check self.datasetspec or self.modelspec for
-        # extraction params, like `op` and `window_half_widths`
-        extractor_type = Datatype2Extractor[data_type]
+    def get_data_source(self, data_type, data_specs):
+        """
+        data_specs is either the file path for bcolz data
+        or dictionary with specs for bed data.
+        """
+        extractor_type = data_type2extractor[data_type]
         options = {}
-        if extractor_type == 'bed':
-            options = {'op': 'max', 'window_half_widths': [1000, 10000]}
+        data_path = data_specs
+        if extractor_type == 'bed': # parse data specs
+            data_path = data_specs['filepath']
+            options = data_type2options.copy()
+            options.update(data_specs['options'])
         return gf.io.DataSource(data_path, extractor_type, options)

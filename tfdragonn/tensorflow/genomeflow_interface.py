@@ -55,15 +55,17 @@ class GenomeFlowInterface(object):
     def get_train_queue(self):
         return self.get_queue(self.training_dataset)
 
-    def get_validation_queue(self, num_epochs=1):
-        return self.get_queue(self.validation_dataset, num_epochs)
+    def get_validation_queue(self, num_epochs=1, asynchronous_enqueues=False):
+        return self.get_queue(
+            self.validation_dataset, num_epochs, asynchronous_enqueues)
 
-    def get_queue(self, dataset, num_epochs=None):
+    def get_queue(self, dataset, num_epochs=None, asynchronous_enqueues=True):
         examples_queues = {
             dataset_id: self.get_example_queue(dataset_values, dataset_id, num_epochs)
             for dataset_id, dataset_values in dataset.items()
         }
-        shared_examples_queue = self.get_shared_examples_queue(examples_queues)
+        shared_examples_queue = self.get_shared_examples_queue(
+            examples_queues, asynchronous_enqueues=asynchronous_enqueues)
         return shared_examples_queue
 
     def get_example_queue(self, dataset, dataset_id, num_epochs=None):
@@ -85,10 +87,11 @@ class GenomeFlowInterface(object):
 
         return examples_queue
 
-    def get_shared_examples_queue(self, examples_queues):
+    def get_shared_examples_queue(self, examples_queues, asynchronous_enqueues=True):
         shared_examples_queue = gf.io.MultiDatasetExampleQueue(
             examples_queues, num_threads=1, enqueue_batch_size=128,
-            capacity=2048, name='multi-dataset-example-queue')
+            capacity=2048, name='multi-dataset-example-queue',
+            asynchronous_enqueues=asynchronous_enqueues)
         return shared_examples_queue
 
     def get_data_source(self, data_type, data_specs):

@@ -37,6 +37,10 @@ IN_MEMORY = False
 BATCH_SIZE = 128
 EPOCH_SIZE = 250000
 
+# TF Session Settings
+DEFER_DELETE_SIZE = int(250 * 1e6)  # 250MB
+GPU_MEM_PROP = 0.45  # Allows 2x sessions / gpu
+
 logging.basicConfig(
     format='%(levelname)s %(asctime)s %(message)s', level=logging.DEBUG)
 logger = logging.getLogger('train-wrapper')
@@ -101,11 +105,9 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     model = models.model_from_config(modelspec)
 
     session_config = tf.ConfigProto()
-    session_config.gpu_options.deferred_deletion_bytes = int(
-        250 * 1e6)  # 250MB
+    session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
     session_config.gpu_options.visible_device_list = str(visiblegpus)
-    # allows 2 sessions/GPU
-    session_config.gpu_options.per_process_gpu_memory_fraction = 0.45
+    session_config.gpu_options.per_process_gpu_memory_fraction = GPU_MEM_PROP
 
     trainer = ClassiferTrainer(epoch_size=EPOCH_SIZE)
 
@@ -113,7 +115,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
         datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
 
     num_validation_batches = int(np.floor(
-        data_interface.num_validation_exs / BATCH_SIZE))
+        data_interface.num_validation_exs / BATCH_SIZE) - 1)
 
     def train(checkpoint=None, num_epochs=1):
         with tf.Graph().as_default():
@@ -125,7 +127,8 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
     def validate(checkpoint):
         with tf.Graph().as_default():
-            validation_queue = data_interface.get_validation_queue()
+            validation_queue = data_interface.get_validation_queue(
+                num_epochs=1, asynchronous_enqueues=False)
             eval_metrics = trainer.evaluate(
                 model, validation_queue, num_validation_batches,
                 valid_log_dir, checkpoint, session_config)

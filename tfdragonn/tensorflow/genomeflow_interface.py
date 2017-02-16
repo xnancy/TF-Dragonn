@@ -44,6 +44,7 @@ class GenomeFlowInterface(object):
             datasets.parse_inputs_and_intervals_with_holdout(
                 self.datasetspec, self.intervalspec,
                 validation_chroms, holdout_chroms)
+        self.task_names = self.training_dataset.values()[0]['task_names']
 
         self.num_train_exs = sum(
             self.training_dataset[k]['intervals']['chrom'].shape[0]
@@ -72,7 +73,6 @@ class GenomeFlowInterface(object):
         intervals = dataset['intervals']
         inputs = dataset['inputs']
         labels = dataset['labels']
-        self.task_names = dataset['task_names']
 
         interval_queue = gf.io.IntervalQueue(
             intervals, labels, name='{}-interval-queue'.format(dataset_id),
@@ -104,6 +104,6 @@ class GenomeFlowInterface(object):
         data_path = data_specs
         if extractor_type == 'bed': # parse data specs
             data_path = data_specs['filepath']
-            options = data_type2options.copy()
+            options = data_type2options[data_type].copy()
             options.update(data_specs['options'])
         return gf.io.DataSource(data_path, extractor_type, options)

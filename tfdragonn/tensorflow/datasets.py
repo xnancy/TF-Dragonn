@@ -12,6 +12,7 @@ RAW_INPUT_NAMES = set(['genome_fasta', 'dnase_bigwig', 'dnase_peaks_bed',
                        'gencode_tss', 'gencode_annotation', 'gencode_polyA',
                        'gencode_lncRNA', 'gencode_tRNA',
                        'expression_tsv'])
+
 raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
                              'dnase_bigwig': 'dnase_data_dir',
                              'dnase_peaks_bed': 'dnase_peaks_counts_data_dir',
@@ -21,18 +22,10 @@ raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
                              'gencode_lncRNA': 'gencode_lncRNA_distances_data_dir',
                              'gencode_tRNA': 'gencode_tRNA_distances_data_dir',
                              'expression_tsv': 'expression_data_dir'}
-processed_input_2_extractor = {
-    'genome_data_dir': 'bcolz_array',
-    'dnase_data_dir': 'bcolz_array',
-    'dnase_peaks_counts_data_dir': 'bed',
-    'gencode_tss_peaks_counts_data_dir': 'bed',
-    'gencode_annotation_distances_data_dir': 'bed',
-    'gencode_polyA_distances_data_dir': 'bed',
-    'gencode_lncRNA_distances_data_dir': 'bed',
-    'gencode_tRNA_distances_data_dir': 'bed',
-    'expression_data_dir': 'bed',
-}
-PROCESSED_INPUT_NAMES = set(raw_input2processed_input.values())
+
+PROCESSED_INPUT_NAMES = set(['genome_data_dir', 'dnase_data_dir',
+                             'tss_counts', 'dhs_counts',
+                             'tss_mean_tpm', 'tss_max_tpm'])
 
 
 def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):

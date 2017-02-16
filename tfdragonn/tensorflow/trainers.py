@@ -14,11 +14,14 @@ from models import Classifier
 
 class ClassiferTrainer(object):
 
-    def __init__(self, optimizer=tf.train.AdamOptimizer, lr=0.0003, epoch_size=250000):
+    def __init__(self, task_names, optimizer=tf.train.AdamOptimizer, lr=0.0003, epoch_size=250000, batch_size=128):
 
+        self._task_names = task_names
+        self._num_tasks = len(self._task_names)
         self.optimizer = optimizer
         self.lr = lr
         self.epoch_size = epoch_size
+        self.batch_size = batch_size
         self._current_step_limit = 0
 
     def get_ambiguous_mask(self, labels, dtype=tf.float32, name='ambiguous-examples-mask'):
@@ -52,11 +55,10 @@ class ClassiferTrainer(object):
 
             return total_loss
 
-    def get_logits_labels_loss_weights(self, model, examples_queue, num_tasks):
-        inputs = examples_queue.outputs
+    def get_logits_labels_loss_weights(self, model, inputs, num_tasks, is_training):
         labels = inputs["labels"]
 
-        logits = model.get_logits(inputs, num_tasks)
+        logits = model.get_logits(inputs, num_tasks, is_training=is_training)
         weights = self.get_weights(inputs)
         loss = self.get_loss(logits, labels, weights)
 
@@ -64,19 +66,20 @@ class ClassiferTrainer(object):
 
     def train(self, model, examples_queue, train_log_dir, checkpoint=None,
               session_config=None, num_epochs=1):
-        num_tasks = len(examples_queue.task_names)
+        num_tasks = self._num_tasks
+        inputs = examples_queue.dequeue_many(self.batch_size)
         logits, labels, loss, weights = self.get_logits_labels_loss_weights(
-            model, examples_queue, num_tasks)
-        task_names = examples_queue.task_names
-        dataset_names = examples_queue.dataset_labels
-        dataset_idxs = examples_queue.outputs['dataset-index']
+            model, inputs, num_tasks, is_training=True)
+        task_names = self._task_names
+        dataset_names = examples_queue.dataset_keys
+        dataset_idxs = inputs['dataset/index']
 
         names_to_values, names_to_updates = classification_metrics(
             logits, labels, weights, dataset_idxs, dataset_names, task_names)
 
         opt = self.optimizer(self.lr)
         train_op = slim.learning.create_train_op(
-            loss, opt, clip_gradient_norm=2.0, summarize_gradients=True,
+            loss, opt, clip_gradient_norm=0, summarize_gradients=True,
             colocate_gradients_with_ops=True, update_ops=names_to_updates.values())
 
         if checkpoint is not None:
@@ -105,12 +108,13 @@ class ClassiferTrainer(object):
         return checkpoint_fname
 
     def evaluate(self, model, examples_queue, num_evals, valid_log_dir, checkpoint, session_config=None):
-        num_tasks = len(examples_queue.task_names)
+        num_tasks = self._num_tasks
+        inputs = examples_queue.dequeue_many(self.batch_size)
         logits, labels, loss, weights = self.get_logits_labels_loss_weights(
-            model, examples_queue, num_tasks)
-        task_names = examples_queue.task_names
-        dataset_names = examples_queue.dataset_labels
-        dataset_idxs = examples_queue.outputs['dataset-index']
+            model, inputs, num_tasks, is_training=False)
+        task_names = self._task_names
+        dataset_names = examples_queue.dataset_keys
+        dataset_idxs = inputs['dataset/index']
 
         names_to_values, names_to_updates = classification_metrics(
             logits, labels, weights, dataset_idxs, dataset_names, task_names)

@@ -449,6 +449,7 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
         self.num_dnase_filters = num_dnase_filters
         self.dnase_conv_width = dnase_conv_width
         self.num_combined_filters = num_combined_filters
+        self.combined_conv_width = combined_conv_width
         self.seq_dnase_fc_layer_widths = seq_dnase_fc_layer_widths # only sequence and dnase
         self.final_fc_layer_widths = final_fc_layer_widths  # everything
         self.pool_width = pool_width

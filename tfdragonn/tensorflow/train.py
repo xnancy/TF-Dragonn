@@ -109,13 +109,14 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     session_config.gpu_options.visible_device_list = str(visiblegpus)
     session_config.gpu_options.per_process_gpu_memory_fraction = GPU_MEM_PROP
 
-    trainer = ClassiferTrainer(epoch_size=EPOCH_SIZE)
-
     data_interface = genomeflow_interface.GenomeFlowInterface(
         datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
 
+    trainer = ClassiferTrainer(data_interface.task_names, epoch_size=EPOCH_SIZE)
+
     num_validation_batches = int(np.floor(
         data_interface.num_validation_exs / BATCH_SIZE) - 1)
+    print("num of validation examples:", data_interface.num_validation_exs)
 
     def train(checkpoint=None, num_epochs=1):
         with tf.Graph().as_default():

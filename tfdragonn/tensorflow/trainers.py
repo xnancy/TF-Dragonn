@@ -116,13 +116,17 @@ class ClassiferTrainer(object):
         dataset_names = examples_queue.dataset_keys
         dataset_idxs = inputs['dataset/index']
 
+        initial_op = tf.group(
+                  tf.global_variables_initializer(),
+                  tf.local_variables_initializer())
+
         names_to_values, names_to_updates = classification_metrics(
             logits, labels, weights, dataset_idxs, dataset_names, task_names)
 
         eval_results = slim.evaluation.evaluate_once(
             master='', checkpoint_path=checkpoint, logdir=valid_log_dir, num_evals=num_evals,
             eval_op=names_to_updates.values(), session_config=session_config,
-            final_op=names_to_values)
+            initial_op=initial_op, final_op=names_to_values)
 
         print(eval_results)
         return eval_results

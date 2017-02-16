@@ -35,7 +35,7 @@ data_type2options = {
 class GenomeFlowInterface(object):
 
     def __init__(self, datasetspec, intervalspec, modelspec,
-                 validation_chroms=[], holdout_chroms=[]):
+                 validation_chroms=[], holdout_chroms=[], pos_sampling_rate=None):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
         self.modelspec = modelspec
@@ -45,7 +45,10 @@ class GenomeFlowInterface(object):
                 self.datasetspec, self.intervalspec,
                 validation_chroms, holdout_chroms)
         self.task_names = self.training_dataset.values()[0]['task_names']
+        if pos_sampling_rate is not None and len(self.task_names) > 1:
+            raise ValueError("pos_sampling_rate is not supported for >1 tasks")
 
+        self.pos_sampling_rate = pos_sampling_rate
         self.num_train_exs = sum(
             self.training_dataset[k]['intervals']['chrom'].shape[0]
             for k in self.training_dataset.keys())
@@ -54,29 +57,58 @@ class GenomeFlowInterface(object):
             for k in self.validation_dataset.keys())
 
     def get_train_queue(self):
-        return self.get_queue(self.training_dataset)
+        return self.get_queue(self.training_dataset,
+                              pos_sampling_rate=self.pos_sampling_rate)
 
     def get_validation_queue(self, num_epochs=1, asynchronous_enqueues=False):
         return self.get_queue(
             self.validation_dataset, num_epochs, asynchronous_enqueues)
 
-    def get_queue(self, dataset, num_epochs=None, asynchronous_enqueues=True):
+    def get_queue(self, dataset, num_epochs=None, asynchronous_enqueues=True, pos_sampling_rate=None):
         examples_queues = {
-            dataset_id: self.get_example_queue(dataset_values, dataset_id, num_epochs)
+            dataset_id: self.get_example_queue(dataset_values, dataset_id, num_epochs, pos_sampling_rate)
             for dataset_id, dataset_values in dataset.items()
         }
         shared_examples_queue = self.get_shared_examples_queue(
             examples_queues, asynchronous_enqueues=asynchronous_enqueues)
         return shared_examples_queue
 
-    def get_example_queue(self, dataset, dataset_id, num_epochs=None):
+    def get_example_queue(self, dataset, dataset_id, num_epochs=None, pos_sampling_rate=None):
         intervals = dataset['intervals']
         inputs = dataset['inputs']
         labels = dataset['labels']
 
-        interval_queue = gf.io.IntervalQueue(
-            intervals, labels, name='{}-interval-queue'.format(dataset_id),
-            num_epochs=num_epochs, capacity=10000, shuffle=False, summary=True)
+        if pos_sampling_rate is not None:
+            # construct separate interval queues for positive and negative intervals
+            pos_indxs = labels == 1
+            neg_indxs = labels == 0
+
+            pos_labels = labels[pos_indxs][:, None] # assumes single task labels!
+            neg_labels = labels[neg_indxs][:, None]
+
+            pos_indxs = pos_indxs.squeeze() # need 1d indices for interval arrays
+            neg_indxs = neg_indxs.squeeze()
+
+            pos_intervals = {k: v[pos_indxs] for k, v in intervals.items()}
+            neg_intervals = {k: v[neg_indxs] for k, v in intervals.items()}
+
+            pos_interval_queue = gf.io.IntervalQueue(
+                pos_intervals, pos_labels, name='{}-pos-interval-queue'.format(dataset_id),
+                num_epochs=num_epochs, capacity=10000, shuffle=False, summary=True)
+            neg_interval_queue = gf.io.IntervalQueue(
+                neg_intervals, neg_labels, name='{}-neg-interval-queue'.format(dataset_id),
+                num_epochs=num_epochs, capacity=10000, shuffle=False, summary=True)
+
+            # sample from both queues using a shared intervals queue
+            interval_queue_ratios = {pos_interval_queue: pos_sampling_rate,
+                                     neg_interval_queue: 1 - pos_sampling_rate}
+            interval_queue = gf.io.SharedIntervalQueue(
+                interval_queue_ratios, name='{}-shared-interval-queue'.format(dataset_id),
+                capacity=10000)
+        else:
+            interval_queue = gf.io.IntervalQueue(
+                intervals, labels, name='{}-interval-queue'.format(dataset_id),
+                num_epochs=num_epochs, capacity=10000, shuffle=False, summary=True)
 
         data_sources = {k: self.get_data_source(k, v) for k, v in inputs.items()}
 

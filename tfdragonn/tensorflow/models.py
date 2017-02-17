@@ -77,7 +77,8 @@ class SequenceClassifier(Classifier):
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], is_training=is_training,
+                reuse=variable_reuse, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
@@ -158,7 +159,8 @@ class SequenceAndDnaseClassifier(Classifier):
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], is_training=is_training,
+                reuse=variable_reuse, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
@@ -255,7 +257,8 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], is_training=is_training,
+                reuse=variable_reuse, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
 
@@ -351,7 +354,8 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], is_training=is_training,
+                reuse=variable_reuse, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
 
@@ -439,7 +443,9 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                  num_combined_filters=(55,), combined_conv_width=(25,),
                  pool_width=25,
                  seq_dnase_fc_layer_widths=(),
-                 final_fc_layer_widths=(), batch_norm=False):
+                 final_fc_layer_widths=(100,),
+                 final_fc_dropout = 0.1,
+                 batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
@@ -452,63 +458,72 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
         self.combined_conv_width = combined_conv_width
         self.seq_dnase_fc_layer_widths = seq_dnase_fc_layer_widths # only sequence and dnase
         self.final_fc_layer_widths = final_fc_layer_widths  # everything
+        self.final_fc_dropout = final_fc_dropout
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
+        batch_norm_params = {'is_training': is_training}
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected],
+                reuse=variable_reuse, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
+                normalizer_params=batch_norm_params if self.batch_norm else None,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
+            with slim.arg_scope([slim.dropout], is_training=is_training):
 
-            seq_preds = inputs["data/genome_data_dir"]
-            seq_preds = expand_4D(seq_preds)
-            for i, (num_filter, filter_width) in enumerate(
-                    zip(self.num_seq_filters, self.seq_conv_width)):
-                filter_height = 4 if i == 0 else 1
-                filter_dims = [filter_height, filter_width]
-                seq_preds = slim.conv2d(seq_preds, num_filter, filter_dims, padding='VALID',
-                                        scope='sequence_conv{:d}'.format(i + 1))
+                seq_preds = inputs["data/genome_data_dir"]
+                seq_preds = expand_4D(seq_preds)
+                for i, (num_filter, filter_width) in enumerate(
+                        zip(self.num_seq_filters, self.seq_conv_width)):
+                    filter_height = 4 if i == 0 else 1
+                    filter_dims = [filter_height, filter_width]
+                    seq_preds = slim.conv2d(seq_preds, num_filter, filter_dims, padding='VALID',
+                                            scope='sequence_conv{:d}'.format(i + 1))
 
-            dnase_preds = inputs["data/dnase_data_dir"]
-            dnase_preds = expand_4D(dnase_preds)
-            for i, (num_filter, filter_width) in enumerate(
-                    zip(self.num_dnase_filters, self.dnase_conv_width)):
-                fitler_dims = [1, filter_width]
-                dnase_preds = slim.conv2d(dnase_preds, num_filter, fitler_dims, padding='VALID',
-                                          scope='dnase_conv{:d}'.format(i + 1))
+                dnase_preds = inputs["data/dnase_data_dir"]
+                dnase_preds = expand_4D(dnase_preds)
+                for i, (num_filter, filter_width) in enumerate(
+                        zip(self.num_dnase_filters, self.dnase_conv_width)):
+                    fitler_dims = [1, filter_width]
+                    dnase_preds = slim.conv2d(dnase_preds, num_filter, fitler_dims, padding='VALID',
+                                              scope='dnase_conv{:d}'.format(i + 1))
 
-            # check if concatenation axis is correct
-            print('seq_preds shape {}'.format(seq_preds.get_shape()))
-            print('dnase_preds shape {}'.format(dnase_preds.get_shape()))
-            seq_dnase_preds = tf.concat(1, [seq_preds, dnase_preds])
-            print('concat shape {}'.format(seq_dnase_preds.get_shape()))
-            for i, (num_filter, filter_width) in enumerate(
-                    zip(self.num_combined_filters, self.combined_conv_width)):
-                filter_height = 2 if i == 0 else 1
-                filter_dims = [filter_height, filter_width]
-                seq_dnase_preds = slim.conv2d(seq_dnase_preds, num_filter, filter_dims, padding='VALID',
-                                              scope='combined_conv{:d}'.format(i + 1))
-            print('after combined conv layers shape {}'.format(seq_dnase_preds.get_shape()))
-            seq_dnase_preds = slim.avg_pool2d(seq_dnase_preds, [1, self.pool_width], stride=[1, self.pool_width],
-                                              padding='VALID', scope='avg_pool')
-            seq_dnase_preds = slim.flatten(seq_dnase_preds, scope='flatten')
-            print('after flattening sequence and dnase shape {}'.format(seq_dnase_preds.get_shape()))
+                # check if concatenation axis is correct
+                print('seq_preds shape {}'.format(seq_preds.get_shape()))
+                print('dnase_preds shape {}'.format(dnase_preds.get_shape()))
+                seq_dnase_preds = tf.concat(1, [seq_preds, dnase_preds])
+                print('concat shape {}'.format(seq_dnase_preds.get_shape()))
+                for i, (num_filter, filter_width) in enumerate(
+                        zip(self.num_combined_filters, self.combined_conv_width)):
+                    filter_height = 2 if i == 0 else 1
+                    filter_dims = [filter_height, filter_width]
+                    seq_dnase_preds = slim.conv2d(seq_dnase_preds, num_filter, filter_dims, padding='VALID',
+                                                  scope='combined_conv{:d}'.format(i + 1))
+                print('after combined conv layers shape {}'.format(seq_dnase_preds.get_shape()))
+                seq_dnase_preds = slim.avg_pool2d(seq_dnase_preds, [1, self.pool_width], stride=[1, self.pool_width],
+                                                  padding='VALID', scope='avg_pool')
+                seq_dnase_preds = slim.flatten(seq_dnase_preds, scope='flatten')
+                print('after flattening sequence and dnase shape {}'.format(seq_dnase_preds.get_shape()))
 
-            # fully connect sequence and dnase
-            if len(self.seq_dnase_fc_layer_widths) > 0:
-                seq_dnase_preds = slim.stack(seq_dnase_preds, slim.fully_connected, self.seq_dnase_fc_layer_widths, scope='fc_seq_dnase')
+                # fully connect sequence and dnase
+                if len(self.seq_dnase_fc_layer_widths) > 0:
+                    seq_dnase_preds = slim.stack(seq_dnase_preds, slim.fully_connected, self.seq_dnase_fc_layer_widths, scope='fc_seq_dnase')
 
-            # fully connect everything
-            logits = tf.concat(1, [seq_dnase_preds,
-                                   inputs["data/dhs_counts"],
-                                   inputs["data/tss_counts"],
-                                   inputs["data/tss_mean_tpm"],
-                                   inputs["data/tss_max_tpm"]])
-            if len(self.final_fc_layer_widths) > 0:
-                logits = slim.stack(logits, slim.fully_connected, self.final_fc_layer_widths, scope='fc_all_features')
-            logits = slim.fully_connected(
-                logits, num_tasks, activation_fn=None, scope='output-fc')
+                # fully connect everything
+                logits = tf.concat(1, [seq_dnase_preds,
+                                       inputs["data/dhs_counts"],
+                                       inputs["data/tss_counts"],
+                                       inputs["data/tss_mean_tpm"],
+                                       inputs["data/tss_max_tpm"]])
+                #if len(self.final_fc_layer_widths) > 0:
+                for i, final_fc_layer_width in enumerate(self.final_fc_layer_widths):
+                    #logits = slim.stack(logits, slim.fully_connected, self.final_fc_layer_widths, scope='fc_all_features')
+                    logits = slim.fully_connected(logits, final_fc_layer_width, scope='fc_all_features_{}'.format(i))
+                    if self.final_fc_dropout > 0:
+                        logits = slim.dropout(logits, 1 - self.final_fc_dropout)
+                logits = slim.fully_connected(
+                    logits, num_tasks, activation_fn=None, normalizer_fn=None, scope='output-fc')
 
             return logits

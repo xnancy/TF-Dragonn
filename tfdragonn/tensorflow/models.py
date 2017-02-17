@@ -7,7 +7,7 @@ from abc import abstractmethod, abstractproperty, ABCMeta
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
-import initializers
+from genomeflow import initializers
 
 
 def model_from_config(model_config_file_path):
@@ -76,15 +76,11 @@ class SequenceClassifier(Classifier):
         self.batch_norm = batch_norm
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
-        batch_norm_params = {'is_training': is_training}
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected],
-                reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
-                normalizer_params=batch_norm_params if self.batch_norm else None,
                 weights_initializer=initializers.he_normal_initializer(),
-                biases_initializer=tf.constant_initializer(0.0)
-          ), slim.arg_scope([slim.dropout], is_training=is_training):
+                biases_initializer=tf.constant_initializer(0.0)):
 
             seq_preds = inputs["data/genome_data_dir"]
             seq_preds = expand_4D(seq_preds)
@@ -95,7 +91,7 @@ class SequenceClassifier(Classifier):
                 seq_preds = slim.conv2d(seq_preds, num_filter, filter_dims, padding='VALID',
                                         scope='sequence_conv{:d}'.format(i + 1))
                 if self.conv_dropout > 0:
-                    seq_preds = slim.dropout(seq_preds, 1 - self.conv_dropout)
+                    seq_preds = slim.dropout(seq_preds, self.conv_dropout)
 
             print('shape after conv layers, before pooling: {}'.format(seq_preds.get_shape()))
             seq_preds = slim.avg_pool2d(seq_preds, [1, self.pool_width], stride=[1, self.pool_width],
@@ -104,7 +100,7 @@ class SequenceClassifier(Classifier):
             for i, fc_layer_width in enumerate(self.fc_layer_widths):
                 seq_preds = slim.fully_connected(seq_preds, fc_layer_width, scope='fc{}'.format(i + 1))
                 if self.fc_layer_dropout > 0:
-                    seq_preds = slim.dropout(seq_preds, 1 - self.fc_layer_dropout)
+                    seq_preds = slim.dropout(seq_preds, self.fc_layer_dropout)
 
             if len(self.task_specific_fc_layer_widths) > 0:
                 task_specific_seq_preds = []
@@ -161,15 +157,11 @@ class SequenceAndDnaseClassifier(Classifier):
         self.batch_norm = batch_norm
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
-        batch_norm_params = {'is_training': is_training}
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected],
-                reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
-                normalizer_params=batch_norm_params if self.batch_norm else None,
                 weights_initializer=initializers.he_normal_initializer(),
-                biases_initializer=tf.constant_initializer(0.0)
-          ), slim.arg_scope([slim.dropout], is_training=is_training):
+                biases_initializer=tf.constant_initializer(0.0)):
 
             seq_preds = inputs["data/genome_data_dir"]
             seq_preds = expand_4D(seq_preds)
@@ -180,7 +172,7 @@ class SequenceAndDnaseClassifier(Classifier):
                 seq_preds = slim.conv2d(seq_preds, num_filter, filter_dims, padding='VALID',
                                         scope='sequence_conv{:d}'.format(i + 1))
                 if self.seq_conv_dropout > 0:
-                    seq_preds = slim.dropout(seq_preds, 1 - self.seq_conv_dropout)
+                    seq_preds = slim.dropout(seq_preds, self.seq_conv_dropout)
 
             dnase_preds = inputs["data/dnase_data_dir"]
             dnase_preds = expand_4D(dnase_preds)
@@ -190,7 +182,7 @@ class SequenceAndDnaseClassifier(Classifier):
                 dnase_preds = slim.conv2d(dnase_preds, num_filter, fitler_dims, padding='VALID',
                                           scope='dnase_conv{:d}'.format(i + 1))
                 if self.dnase_conv_dropout > 0:
-                    dnase_preds = slim.dropout(dnase_preds, 1 - self.combined_conv_dropout)
+                    dnase_preds = slim.dropout(dnase_preds, self.combined_conv_dropout)
 
             # check if concatenation axis is correct
             print('seq_preds shape {}'.format(seq_preds.get_shape()))
@@ -204,7 +196,7 @@ class SequenceAndDnaseClassifier(Classifier):
                 logits = slim.conv2d(logits, num_filter, filter_dims, padding='VALID',
                                      scope='combined_conv{:d}'.format(i + 1))
                 if self.combined_conv_dropout > 0:
-                    logits = slim.dropout(logits, 1 - self.combined_conv_dropout)
+                    logits = slim.dropout(logits, self.combined_conv_dropout)
 
             print('after combined conv layers shape {}'.format(logits.get_shape()))
             logits = slim.avg_pool2d(logits, [1, self.pool_width], stride=[1, self.pool_width],
@@ -213,7 +205,7 @@ class SequenceAndDnaseClassifier(Classifier):
             for i, fc_layer_width in enumerate(self.fc_layer_widths):
                 logits = slim.fully_connected(logits, fc_layer_width, scope='fc{}'.format(i + 1))
                 if self.fc_layer_dropout > 0:
-                    logits = slim.dropout(logits, 1 - self.fc_layer_dropout)
+                    logits = slim.dropout(logits, self.fc_layer_dropout)
 
             if len(self.task_specific_fc_layer_widths) > 0:
                 task_specific_logits = []
@@ -245,7 +237,7 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
                  peaks_counts_fc_layer_widths=(20,),
-                 final_fc_layer_widths=(), pool_width=25):
+                 final_fc_layer_widths=(), pool_width=25, batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
@@ -259,11 +251,11 @@ class SequenceDnaseAndDnasePeaksCountsClassifier(Classifier):
         self.peaks_counts_fc_layer_widths = peaks_counts_fc_layer_widths
         self.final_fc_layer_widths = final_fc_layer_widths
         self.pool_width = pool_width
+        self.batch_norm = batch_norm
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected],
-                reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
 
@@ -339,7 +331,7 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
                  num_combined_filters=(55,), combined_conv_width=(25,),
                  peaks_counts_fc_layer_widths=(20,), pre_gencode_fc_layer_widths=(50,),
                  gencode_fc_layer_widths=(30,),
-                 final_fc_layer_widths=(), pool_width=25):
+                 final_fc_layer_widths=(), pool_width=25, batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
@@ -355,11 +347,11 @@ class SequenceDnaseDnasePeaksCountsAndGencodeClassifier(Classifier):
         self.gencode_fc_layer_widths = gencode_fc_layer_widths  # gencode features only
         self.final_fc_layer_widths = final_fc_layer_widths  # everything
         self.pool_width = pool_width
+        self.batch_norm = batch_norm
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected],
-                reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
                 weights_initializer=initializers.he_normal_initializer(),
                 biases_initializer=tf.constant_initializer(0.0)):
 
@@ -447,9 +439,7 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                  num_combined_filters=(55,), combined_conv_width=(25,),
                  pool_width=25,
                  seq_dnase_fc_layer_widths=(),
-                 final_fc_layer_widths=(100,),
-                 final_fc_dropout = 0.1,
-                 batch_norm=True):
+                 final_fc_layer_widths=(), batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
         assert len(num_combined_filters) == len(combined_conv_width)
@@ -459,23 +449,17 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
         self.num_dnase_filters = num_dnase_filters
         self.dnase_conv_width = dnase_conv_width
         self.num_combined_filters = num_combined_filters
-        self.combined_conv_width = combined_conv_width
         self.seq_dnase_fc_layer_widths = seq_dnase_fc_layer_widths # only sequence and dnase
         self.final_fc_layer_widths = final_fc_layer_widths  # everything
-        self.final_fc_dropout = final_fc_dropout
         self.pool_width = pool_width
         self.batch_norm = batch_norm
 
     def get_logits(self, inputs, num_tasks, is_training=True, variable_reuse=False):
-        batch_norm_params = {'is_training': is_training}
         with slim.arg_scope(
-                [slim.conv2d, slim.fully_connected],
-                reuse=variable_reuse, activation_fn=tf.nn.relu,
+                [slim.conv2d, slim.fully_connected], reuse=variable_reuse, activation_fn=tf.nn.relu,
                 normalizer_fn=slim.batch_norm if self.batch_norm else None,
-                normalizer_params=batch_norm_params if self.batch_norm else None,
                 weights_initializer=initializers.he_normal_initializer(),
-                biases_initializer=tf.constant_initializer(0.0)
-          ), slim.arg_scope([slim.dropout], is_training=is_training):
+                biases_initializer=tf.constant_initializer(0.0)):
 
             seq_preds = inputs["data/genome_data_dir"]
             seq_preds = expand_4D(seq_preds)
@@ -521,11 +505,10 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                                    inputs["data/tss_counts"],
                                    inputs["data/tss_mean_tpm"],
                                    inputs["data/tss_max_tpm"]])
-            for i, final_fc_layer_width in enumerate(self.final_fc_layer_widths):
-                logits = slim.fully_connected(logits, final_fc_layer_width, scope='fc_all_features_{}'.format(i))
-                if self.final_fc_dropout > 0:
-                    logits = slim.dropout(logits, 1 - self.final_fc_dropout)
+            if len(self.final_fc_layer_widths) > 0:
+                logits = slim.stack(logits, slim.fully_connected, self.final_fc_layer_widths, scope='fc_all_features')
             logits = slim.fully_connected(
-                logits, num_tasks, activation_fn=None, normalizer_fn=None, scope='output-fc')
+                logits, num_tasks, activation_fn=None, scope='output-fc')
 
             return logits
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    

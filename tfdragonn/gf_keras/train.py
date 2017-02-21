@@ -8,14 +8,16 @@ import argparse
 import os
 import logging
 import shutil
-
 import numpy as np
+
+from keras import backend as K
 import tensorflow as tf
 
 from tfdragonn.tensorflow import database
 import genomeflow_interface
 import io_utils
 import models
+import trainers
 
 DIR_PREFIX = '/srv/scratch/tfbinding/'
 LOGDIR_PREFIX = '/srv/scratch/tfbinding/tf_logs/'
@@ -34,7 +36,7 @@ EARLYSTOPPING_PATIENCE = 4
 
 IN_MEMORY = False
 BATCH_SIZE = 128
-EPOCH_SIZE = 25000
+EPOCH_SIZE = 250000
 
 
 # TF Session Settings
@@ -103,12 +105,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
     session_config.gpu_options.per_process_gpu_memory_fraction = GPU_MEM_PROP
     session = tf.Session(config=session_config)
-    from keras import backend as K
     K.set_session(session)
-
-    logging.info('compiling model')
-    model = models.model_from_config(modelspec)
-    model.compile(optimizer='adam', lr=0.0003)
 
     logging.info('Setting up genomeflow queues')
     data_interface = genomeflow_interface.GenomeFlowInterface(
@@ -116,43 +113,23 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
     train_queue = data_interface.get_train_queue()
     validation_queue = data_interface.get_validation_queue(
-                        num_epochs=1, asynchronous_enqueues=False)
+                        num_epochs=None, asynchronous_enqueues=False) # TODO: make this work with num_epochs=1
+
+    logging.info('compiling model')
+    model = models.model_from_config(modelspec)
+    trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
+                                       optimizer='adam',
+                                       lr=0.0003,
+                                       batch_size=BATCH_SIZE,
+                                       epoch_size=EPOCH_SIZE,
+                                       num_epochs=100,
+                                       early_stopping_metric=EARLYSTOPPING_KEY,
+                                       early_stopping_patience=EARLYSTOPPING_PATIENCE)
+    trainer.compile(model)
 
     logging.info('training model')
-    model.train(train_queue, validation_queue, task_names=None,
-                save_best_model_to_prefix="{}/model".format(logdir),
-                early_stopping_metric=EARLYSTOPPING_KEY,
-                epoch_size=EPOCH_SIZE, num_epochs=100,
-                early_stopping_patience=EARLYSTOPPING_PATIENCE,
-                verbose=True)
-    """
-    trainer = ClassiferTrainer(data_interface.task_names, epoch_size=EPOCH_SIZE)
-
-    num_validation_batches = int(np.floor(
-        data_interface.num_validation_exs / BATCH_SIZE) - 1)
-    print("num of validation examples:", data_interface.num_validation_exs)
-
-    def train(checkpoint=None, num_epochs=1):
-        with tf.Graph().as_default():
-            train_queue = data_interface.get_train_queue()
-            new_checkpoint = trainer.train(
-                model, train_queue, train_log_dir, checkpoint,
-                session_config, num_epochs)
-            return new_checkpoint
-
-    def validate(checkpoint):
-        with tf.Graph().as_default():
-            validation_queue = data_interface.get_validation_queue(
-                num_epochs=1, asynchronous_enqueues=False)
-            eval_metrics = trainer.evaluate(
-                model, validation_queue, num_validation_batches,
-                valid_log_dir, checkpoint, session_config)
-            return eval_metrics
-
-    train_until_earlystop(
-        train, validate, metric_key=EARLYSTOPPING_KEY, patience=EARLYSTOPPING_PATIENCE,
-        tolerance=EARLYSTOPPING_TOLERANCE, max_epochs=100)
-    """
+    trainer.train(model, train_queue, validation_queue,
+                  save_best_model_to_prefix="{}/model".format(logdir))
 
 if __name__ == '__main__':
     main()

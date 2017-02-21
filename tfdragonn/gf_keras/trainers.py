@@ -81,7 +81,7 @@ class ClassifierTrainer(object):
                 if save_best_model_to_prefix is not None:
                     model.save(save_best_model_to_prefix)
             else:
-                if early_stopping_wait >= early_stopping_patience:
+                if early_stopping_wait >= self.early_stopping_patience:
                     break
                 early_stopping_wait += 1
         if verbose: # end of training messages

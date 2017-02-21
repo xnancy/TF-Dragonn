@@ -17,7 +17,7 @@ from keras.objectives import binary_crossentropy
 from keras.utils.generic_utils import Progbar
 
 from metrics import ClassificationResult, AMBIG_LABEL
-from io_utils import ExampleQueueIterator
+import io_utils
 
 def model_from_config(model_config_file_path):
     """Load a model from a json config file."""
@@ -55,7 +55,7 @@ class SequenceClassifier(object):
         assert len(num_filters) == len(conv_width)
 
         self.num_tasks = num_tasks
-        seq_inputs = Input(shape=(4, interval_size))
+        seq_inputs = Input(shape=(4, interval_size), name="data/genome_data_dir")
         seq_preds = seq_inputs
         seq_preds = Permute((2, 1))(seq_preds) # conv1d expects (interval_size, 4)
         for i, (nb_filter, nb_col) in enumerate(zip(num_filters, conv_width)):
@@ -84,14 +84,16 @@ class SequenceClassifier(object):
     def score(self, iterator, metric):
         return self.test(iterator)[metric]
 
-    def train(self, train_iterator, valid_iterator,
+    def train(self, train_queue, valid_queue,
               task_names=None, save_best_model_to_prefix=None,
               early_stopping_metric='auPRC',
+              batch_size=128,
               epoch_size=250000,
               num_epochs=100,
               early_stopping_patience=5, verbose=True):
         process = psutil.Process(os.getpid())
 
+        train_iterator = io_utils.ExampleQueueIterator(train_queue, batch_size=batch_size, num_epochs=1)
         batch_size = train_iterator.batch_size
         valid_metrics = []
         best_metric = np.inf if early_stopping_metric == 'Loss' else -np.inf
@@ -106,7 +108,7 @@ class SequenceClassifier(object):
                 progbar.update(batch_indxs * batch_size,
                                values=[("loss", batch_loss), ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
 
-            epoch_valid_metrics = self.test(valid_iterator, task_names=task_names)
+            epoch_valid_metrics = self.test(valid_queue, task_names=task_names)
             valid_metrics.append(epoch_valid_metrics)
             if verbose:
                 print('\nEpoch {}:'.format(epoch))
@@ -131,10 +133,10 @@ class SequenceClassifier(object):
                       'were saved to {1}.arch.json and {1}.weights.h5'.format(
                     best_epoch, save_best_model_to_prefix))
 
-    def test(self, iterator, task_names=None, verbose=True):
+    def test(self, queue, batch_size=128, task_names=None, verbose=True):
+        iterator = io_utils.ExampleQueueIterator(queue, batch_size=batch_size, num_epochs=1)
         batch_size = iterator.batch_size
-        num_samples = iterator._queue._num_examples
-        num_batches = int(num_samples / batch_size)
+        num_batches = int(iterator.num_examples / batch_size) # - 1
         num_samples = batch_size * num_batches
         if verbose:
             process = psutil.Process(os.getpid())
@@ -142,11 +144,10 @@ class SequenceClassifier(object):
         predictions = []
         labels = []
         for batch_indx in range(1, num_batches + 1):
-            batch = next(iterator)
+            batch = iterator.next()
             predictions.append(np.vstack(self.model.predict_on_batch(batch['data/genome_data_dir'])))
             labels.append(batch['labels'])
             if verbose:
-                progbar.update(batch_indx * batch_size)
                 rss_minus_shr_memory = (process.memory_info().rss -  process.memory_info().shared)  / 10**6
                 progbar.update(batch_indx * batch_size, values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
 

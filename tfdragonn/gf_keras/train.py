@@ -28,7 +28,6 @@ TRAIN_DIRNAME = 'train'
 VALID_DIRNAME = 'valid'
 """
 
-#EARLYSTOPPING_KEY = 'metrics/auPRC'
 EARLYSTOPPING_KEY = 'auPRC'
 EARLYSTOPPING_PATIENCE = 4
 #EARLYSTOPPING_TOLERANCE = 1e-4
@@ -88,53 +87,39 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     os.makedirs(logdir)
     run_id = str(logdir.lstrip(LOGDIR_PREFIX))
 
-    #train_log_dir = os.path.join(logdir, TRAIN_DIRNAME)
-    #valid_log_dir = os.path.join(logdir, VALID_DIRNAME)
-
     logging.info('dataspec file: {}'.format(datasetspec))
     logging.info('intervalspec file: {}'.format(intervalspec))
     logging.info('logdir path: {}'.format(logdir))
-    #logging.info('visiblegpus string: {}'.format(visiblegpus))
+    logging.info('visiblegpus string: {}'.format(visiblegpus))
 
     logging.info('registering with tfdragonn database')
     metadata = {}  # TODO(cprobert): save metadata here
     database.add_run(run_id, datasetspec, intervalspec,
                      modelspec, logdir, metadata)
 
-    ## TODO: figure out how to set up keras session to use the gpu 
-    #logging.info("Setting up model session")
-    #os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-    #os.environ['LD_LIBRARY_PATH'] += ':/usr/local/cuda/extras/CUPTI/lib64/'
-
-    #config = tf.ConfigProto()
-    #config.gpu_options.allow_growth = True
-    """
+    logging.info("Setting up keras session")
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(visiblegpus)
     session_config = tf.ConfigProto()
     session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
-    session_config.gpu_options.visible_device_list = str(visiblegpus)
     session_config.gpu_options.per_process_gpu_memory_fraction = GPU_MEM_PROP
     session = tf.Session(config=session_config)
     from keras import backend as K
     K.set_session(session)
-    """
 
     logging.info('compiling model')
     model = models.model_from_config(modelspec)
     model.compile(optimizer='adam', lr=0.0003)
 
-    logging.info('Setting up readers')
+    logging.info('Setting up genomeflow queues')
     data_interface = genomeflow_interface.GenomeFlowInterface(
         datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
 
     train_queue = data_interface.get_train_queue()
-    train_iterator = io_utils.ExampleQueueIterator(train_queue, batch_size=BATCH_SIZE, in_memory=IN_MEMORY)
-
     validation_queue = data_interface.get_validation_queue(
                         num_epochs=1, asynchronous_enqueues=False)
-    validation_iterator = io_utils.ExampleQueueIterator(validation_queue, batch_size=BATCH_SIZE, in_memory=IN_MEMORY)
 
     logging.info('training model')
-    model.train(train_iterator, validation_iterator, task_names=None,
+    model.train(train_queue, validation_queue, task_names=None,
                 save_best_model_to_prefix="{}/model".format(logdir),
                 early_stopping_metric=EARLYSTOPPING_KEY,
                 epoch_size=EPOCH_SIZE, num_epochs=100,

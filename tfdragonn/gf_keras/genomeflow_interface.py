@@ -37,13 +37,14 @@ class GenomeFlowInterface(object):
 
     def __init__(self, datasetspec, intervalspec, modelspec,
                  validation_chroms=[], holdout_chroms=[],
-                 pos_sampling_rate=None):
+                 shuffle=True, pos_sampling_rate=None):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
         self.modelspec = modelspec
         model = models.model_from_config(modelspec)
         self.input_names = [input_name.split('/')[1]
                             for input_name in model.get_inputs]
+        self.shuffle = shuffle
 
         self.training_dataset, self.validation_dataset = \
             datasets.parse_inputs_and_intervals_with_holdout(
@@ -64,7 +65,8 @@ class GenomeFlowInterface(object):
     def get_train_queue(self):
         return self.get_queue(self.training_dataset,
                               pos_sampling_rate=self.pos_sampling_rate,
-                              input_names=self.input_names)
+                              input_names=self.input_names,
+                              shuffle=self.shuffle)
 
     def get_validation_queue(self, num_epochs=1, asynchronous_enqueues=False):
         return self.get_queue(
@@ -72,17 +74,22 @@ class GenomeFlowInterface(object):
             input_names=self.input_names)
 
     def get_queue(self, dataset, num_epochs=None, asynchronous_enqueues=True,
-                  pos_sampling_rate=None, input_names=None):
+                  pos_sampling_rate=None, input_names=None, shuffle=False):
         examples_queues = {
-            dataset_id: self.get_example_queue(dataset_values, dataset_id, num_epochs,
-                                               pos_sampling_rate, input_names)
+            dataset_id: self.get_example_queue(dataset_values, dataset_id,
+                                               num_epochs=num_epochs,
+                                               pos_sampling_rate=pos_sampling_rate,
+                                               input_names=input_names,
+                                               shuffle=shuffle)
             for dataset_id, dataset_values in dataset.items()
         }
         shared_examples_queue = self.get_shared_examples_queue(
             examples_queues, asynchronous_enqueues=asynchronous_enqueues)
         return shared_examples_queue
 
-    def get_example_queue(self, dataset, dataset_id, num_epochs=None, pos_sampling_rate=None, input_names=None):
+    def get_example_queue(self, dataset, dataset_id,
+                          num_epochs=None, pos_sampling_rate=None,
+                          input_names=None, shuffle=False):
         intervals = dataset['intervals']
         inputs = dataset['inputs']
         labels = dataset['labels']
@@ -113,11 +120,12 @@ class GenomeFlowInterface(object):
                                      neg_interval_queue: 1 - pos_sampling_rate}
             interval_queue = gf.io.SharedIntervalQueue(
                 interval_queue_ratios, name='{}-shared-interval-queue'.format(dataset_id),
-                capacity=10000)
+                capacity=50000, shuffle=shuffle, min_after_dequeue=40000)
         else:
             interval_queue = gf.io.IntervalQueue(
                 intervals, labels, name='{}-interval-queue'.format(dataset_id),
-                num_epochs=num_epochs, capacity=10000, shuffle=False, summary=True)
+                num_epochs=num_epochs, capacity=50000, shuffle=shuffle,
+                min_after_dequeue=40000, summary=True)
 
         if input_names is not None: # use only these inputs in the example queue
             assert all([input_name in inputs.keys() for input_name in input_names])

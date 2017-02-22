@@ -55,12 +55,14 @@ class SequenceClassifier(Classifier):
                  pool_width=35, dropout=0, batch_norm=False):
         assert len(num_filters) == len(conv_width)
 
-        seq_inputs = Input(shape=(4, interval_size), name="data/genome_data_dir")
+        seq_inputs = Input(shape=(4, interval_size),
+                           name="data/genome_data_dir")
         seq_preds = seq_inputs
         # conv1d expects (interval_size, 4)
         seq_preds = Permute((2, 1))(seq_preds)
         for i, (nb_filter, nb_col) in enumerate(zip(num_filters, conv_width)):
-            seq_preds = Convolution1D(nb_filter, nb_col, 'he_normal')(seq_preds)
+            seq_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(seq_preds)
             if batch_norm:
                 seq_preds = BatchNormalization()(seq_preds)
             seq_preds = Activation('relu')(seq_preds)
@@ -95,11 +97,14 @@ class SequenceAndDnaseClassifier(Classifier):
         assert len(num_combined_filters) == len(combined_conv_width)
 
         # convolve sequence
-        seq_inputs = Input(shape=(4, interval_size), name="data/genome_data_dir")
+        seq_inputs = Input(shape=(4, interval_size),
+                           name="data/genome_data_dir")
         seq_preds = seq_inputs
-        seq_preds = Permute((2, 1))(seq_preds) # conv1d expects (interval_size, 4)
+        # conv1d expects (interval_size, 4)
+        seq_preds = Permute((2, 1))(seq_preds)
         for nb_filter, nb_col in zip(num_seq_filters, seq_conv_width):
-            seq_preds = Convolution1D(nb_filter, nb_col, 'he_normal')(seq_preds)
+            seq_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(seq_preds)
             if batch_norm:
                 seq_preds = BatchNormalization()(seq_preds)
             seq_preds = Activation('relu')(seq_preds)
@@ -107,11 +112,14 @@ class SequenceAndDnaseClassifier(Classifier):
                 seq_preds = Dropout(dropout)(seq_preds)
 
         # convolve dnase
-        dnase_inputs = Input(shape=(interval_size,), name="data/dnase_data_dir")
+        dnase_inputs = Input(shape=(interval_size,),
+                             name="data/dnase_data_dir")
         dnase_preds = dnase_inputs
-        dnase_preds = Reshape((1000, 1))(dnase_preds) # conv1d expects (interval_size, 1)
+        # conv1d expects (interval_size, 1)
+        dnase_preds = Reshape((1000, 1))(dnase_preds)
         for nb_filter, nb_col in zip(num_dnase_filters, dnase_conv_width):
-            dnase_preds = Convolution1D(nb_filter, nb_col, 'he_normal')(dnase_preds)
+            dnase_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(dnase_preds)
             if batch_norm:
                 dnase_preds = BatchNormalization()(dnase_preds)
             dnase_preds = Activation('relu')(dnase_preds)
@@ -119,7 +127,7 @@ class SequenceAndDnaseClassifier(Classifier):
                 dnase_preds = Dropout(dropout)(dnase_preds)
 
         # stack and convolve
-        logits  = Merge(mode='concat', concat_axis=-1)([seq_preds, dnase_preds])
+        logits = Merge(mode='concat', concat_axis=-1)([seq_preds, dnase_preds])
         for nb_filter, nb_col in zip(num_combined_filters, combined_conv_width):
             logits = Convolution1D(nb_filter, nb_col, 'he_normal')(logits)
             if batch_norm:
@@ -172,11 +180,14 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
         assert len(num_combined_filters) == len(combined_conv_width)
 
         # convolve sequence
-        seq_inputs = Input(shape=(4, interval_size), name="data/genome_data_dir")
+        seq_inputs = Input(shape=(4, interval_size),
+                           name="data/genome_data_dir")
         seq_preds = seq_inputs
-        seq_preds = Permute((2, 1))(seq_preds) # conv1d expects (interval_size, 4)
+        # conv1d expects (interval_size, 4)
+        seq_preds = Permute((2, 1))(seq_preds)
         for nb_filter, nb_col in zip(num_seq_filters, seq_conv_width):
-            seq_preds = Convolution1D(nb_filter, nb_col, 'he_normal')(seq_preds)
+            seq_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(seq_preds)
             if batch_norm:
                 seq_preds = BatchNormalization()(seq_preds)
             seq_preds = Activation('relu')(seq_preds)
@@ -184,11 +195,14 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                 seq_preds = Dropout(dropout)(seq_preds)
 
         # convolve dnase
-        dnase_inputs = Input(shape=(interval_size,), name="data/dnase_data_dir")
+        dnase_inputs = Input(shape=(interval_size,),
+                             name="data/dnase_data_dir")
         dnase_preds = dnase_inputs
-        dnase_preds = Reshape((1000, 1))(dnase_preds) # conv1d expects (interval_size, 1)
+        # conv1d expects (interval_size, 1)
+        dnase_preds = Reshape((1000, 1))(dnase_preds)
         for nb_filter, nb_col in zip(num_dnase_filters, dnase_conv_width):
-            dnase_preds = Convolution1D(nb_filter, nb_col, 'he_normal')(dnase_preds)
+            dnase_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(dnase_preds)
             if batch_norm:
                 dnase_preds = BatchNormalization()(dnase_preds)
             dnase_preds = Activation('relu')(dnase_preds)
@@ -196,7 +210,7 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                 dnase_preds = Dropout(dropout)(dnase_preds)
 
         # stack sequence + dnase and convolve
-        logits  = Merge(mode='concat', concat_axis=-1)([seq_preds, dnase_preds])
+        logits = Merge(mode='concat', concat_axis=-1)([seq_preds, dnase_preds])
         for nb_filter, nb_col in zip(num_combined_filters, combined_conv_width):
             logits = Convolution1D(nb_filter, nb_col, 'he_normal')(logits)
             if batch_norm:

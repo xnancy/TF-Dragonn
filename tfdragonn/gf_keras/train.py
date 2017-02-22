@@ -36,8 +36,8 @@ EARLYSTOPPING_PATIENCE = 4
 
 IN_MEMORY = False
 BATCH_SIZE = 128
-EPOCH_SIZE = 250000
-
+#EPOCH_SIZE = 250000
+EPOCH_SIZE = 1000000
 
 # TF Session Settings
 DEFER_DELETE_SIZE = int(250 * 1e6)  # 250MB
@@ -116,15 +116,15 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
                         num_epochs=None, asynchronous_enqueues=False) # TODO: make this work with num_epochs=1
 
     logging.info('compiling model')
-    model = models.model_from_config(modelspec)
+    model = models.model_from_config_and_queue(modelspec, train_queue)
     trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
-                                       optimizer='adam',
-                                       lr=0.0003,
-                                       batch_size=BATCH_SIZE,
-                                       epoch_size=EPOCH_SIZE,
-                                       num_epochs=100,
-                                       early_stopping_metric=EARLYSTOPPING_KEY,
-                                       early_stopping_patience=EARLYSTOPPING_PATIENCE)
+                                         optimizer='adam',
+                                         lr=0.0003,
+                                         batch_size=BATCH_SIZE,
+                                         epoch_size=EPOCH_SIZE,
+                                         num_epochs=100,
+                                         early_stopping_metric=EARLYSTOPPING_KEY,
+                                         early_stopping_patience=EARLYSTOPPING_PATIENCE)
     trainer.compile(model)
 
     logging.info('training model')

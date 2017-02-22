@@ -41,9 +41,9 @@ class GenomeFlowInterface(object):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
         self.modelspec = modelspec
-        model = models.model_from_config(modelspec)
+        input_names = models.model_inputs_from_config(modelspec)
         self.input_names = [input_name.split('/')[1]
-                            for input_name in model.get_inputs]
+                            for input_name in input_names]
         self.shuffle = shuffle
 
         self.training_dataset, self.validation_dataset = \

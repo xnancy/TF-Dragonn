@@ -8,14 +8,12 @@ import argparse
 import os
 import logging
 import shutil
-import numpy as np
 
 from keras import backend as K
 import tensorflow as tf
 
-from tfdragonn.tensorflow import database
+import database
 import genomeflow_interface
-import io_utils
 import models
 import trainers
 
@@ -66,6 +64,7 @@ def main():
     train_tf_dragonn(args.dataset_params_file, args.interval_params_file,
                      args.model_params_file, args.logdir, args.visiblegpus)
 
+
 def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
     datasetspec = os.path.abspath(datasetspec)
@@ -113,7 +112,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
     train_queue = data_interface.get_train_queue()
     validation_queue = data_interface.get_validation_queue(
-                        num_epochs=None, asynchronous_enqueues=False) # TODO: make this work with num_epochs=1
+        num_epochs=None, asynchronous_enqueues=False)  # TODO: make this work with num_epochs=1
 
     logging.info('compiling model')
     model = models.model_from_config_and_queue(modelspec, train_queue)
@@ -130,6 +129,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     logging.info('training model')
     trainer.train(model, train_queue, validation_queue,
                   save_best_model_to_prefix="{}/model".format(logdir))
+
 
 if __name__ == '__main__':
     main()

@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+
 class ExampleQueueIterator(object):
 
     @property
@@ -10,7 +11,13 @@ class ExampleQueueIterator(object):
     def num_examples(self):
         return self._queue.num_examples
 
-    def __init__(self, queue, batch_size=128, num_epochs=None):
+    def __init__(self, queue, num_exs_batch=128, num_epochs=None, num_exs_epoch=None):
+        """
+        If num_epochs is set, limit number of epochs to iterate over.
+
+        If num_exs_epoch is None, use queue.num_examples as num_exs_epoch. Else,
+            use num_exs_epoch as the epoch size.
+        """
         queue_outputs = queue.dequeue_many(batch_size)
 
         # Run queue on the CPU only (use 0 GPUs)
@@ -22,12 +29,17 @@ class ExampleQueueIterator(object):
         print "*****START QUEUE RUNNERS*****"
         queue_runner_threads = tf.train.start_queue_runners(session)
 
-        self._batch_size = batch_size
+        self._batch_size = num_exs_batch
         self._session = session
         self._queue = queue
         self._queue_outputs = queue_outputs
+
+        if num_exs_epoch is None:
+            num_exs_epoch = self._queue.num_examples
+        self._epoch_size = num_exs_epoch
+
         if num_epochs is not None:
-            self._len = num_epochs * self._queue.num_examples
+            self._len = num_epochs * self._epoch_size
         else:
             self._len = None
         self._num_examples_left = self._len
@@ -44,10 +56,14 @@ class ExampleQueueIterator(object):
                 raise StopIteration
 
             self._num_examples_left -= self._batch_size
-        try:
-            batch = self._session.run(self._queue_outputs)
-        except tf.errors.OutOfRangeError:
-            batch = self._session.run(self._queue_outputs)
+
+        batch = None
+
+        while batch is None:
+            try:
+                batch = self._session.run(self._queue_outputs)
+            except tf.errors.OutOfRangeError:
+                pass
 
         return batch
 

@@ -161,11 +161,11 @@ class SequenceAndDnaseClassifier(Classifier):
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
                  pool_width=25,
-                 fc_layer_widths=(),
-                 seq_conv_dropout=0,
-                 dnase_conv_dropout=0,
-                 combined_conv_dropout=0,
-                 fc_layer_dropout=0,
+                 fc_layer_widths=(100,),
+                 seq_conv_dropout=0.1,
+                 dnase_conv_dropout=0.1,
+                 combined_conv_dropout=0.1,
+                 fc_layer_dropout=0.1,
                  batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
@@ -184,7 +184,7 @@ class SequenceAndDnaseClassifier(Classifier):
                 seq_preds = BatchNormalization()(seq_preds)
             seq_preds = Activation('relu')(seq_preds)
             if seq_conv_dropout > 0:
-                seq_preds = Dropout(dropout)(seq_preds)
+                seq_preds = Dropout(seq_conv_dropout)(seq_preds)
 
         # convolve dnase
         dnase_preds = inputs["data/dnase_data_dir"]
@@ -195,7 +195,7 @@ class SequenceAndDnaseClassifier(Classifier):
                 dnase_preds = BatchNormalization()(dnase_preds)
             dnase_preds = Activation('relu')(dnase_preds)
             if dnase_conv_dropout > 0:
-                dnase_preds = Dropout(dropout)(dnase_preds)
+                dnase_preds = Dropout(dnase_conv_dropout)(dnase_preds)
 
         # stack and convolve
         logits = Merge(mode='concat', concat_axis=-1)([seq_preds, dnase_preds])
@@ -205,7 +205,7 @@ class SequenceAndDnaseClassifier(Classifier):
                 logits = BatchNormalization()(logits)
             logits = Activation('relu')(logits)
             if combined_conv_dropout > 0:
-                logits = Dropout(dropout)(logits)
+                logits = Dropout(combined_conv_dropout)(logits)
 
         # pool and fully connect
         logits = AveragePooling1D((pool_width))(logits)
@@ -216,7 +216,7 @@ class SequenceAndDnaseClassifier(Classifier):
                 logits = BatchNormalization()(logits)
             logits = Activation('relu')(logits)
             if fc_layer_dropout > 0:
-                logits = Dropout(dropout)(logits)
+                logits = Dropout(fc_layer_dropout)(logits)
         logits = Dense(shapes['labels'][-1])(logits)
         logits = Activation('sigmoid')(logits)
         self.model = Model(input=keras_inputs.values(), output=logits)
@@ -229,13 +229,13 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
                  pool_width=25,
-                 seq_dnase_fc_layer_widths=(),
+                 seq_dnase_fc_layer_widths=(100,),
                  final_fc_layer_widths=(100,),
-                 seq_conv_dropout=0,
-                 dnase_conv_dropout=0,
-                 combined_conv_dropout=0,
-                 seq_dnase_fc_layer_dropout=0,
-                 final_fc_dropout=0,
+                 seq_conv_dropout=0.1,
+                 dnase_conv_dropout=0.1,
+                 combined_conv_dropout=0.1,
+                 seq_dnase_fc_layer_dropout=0.1,
+                 final_fc_dropout=0.1,
                  batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
@@ -254,7 +254,7 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                 seq_preds = BatchNormalization()(seq_preds)
             seq_preds = Activation('relu')(seq_preds)
             if seq_conv_dropout > 0:
-                seq_preds = Dropout(dropout)(seq_preds)
+                seq_preds = Dropout(seq_conv_dropout)(seq_preds)
 
         # convolve dnase
         dnase_preds = inputs["data/dnase_data_dir"]
@@ -265,7 +265,7 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                 dnase_preds = BatchNormalization()(dnase_preds)
             dnase_preds = Activation('relu')(dnase_preds)
             if dnase_conv_dropout > 0:
-                dnase_preds = Dropout(dropout)(dnase_preds)
+                dnase_preds = Dropout(dnase_conv_dropout)(dnase_preds)
 
         # stack sequence + dnase and convolve
         logits = Merge(mode='concat', concat_axis=-1)([seq_preds, dnase_preds])
@@ -275,7 +275,7 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                 logits = BatchNormalization()(logits)
             logits = Activation('relu')(logits)
             if combined_conv_dropout > 0:
-                logits = Dropout(dropout)(logits)
+                logits = Dropout(combined_conv_dropout)(logits)
 
         # pool and fully connect seq + dnase
         logits = AveragePooling1D((pool_width))(logits)
@@ -286,7 +286,7 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                 logits = BatchNormalization()(logits)
             logits = Activation('relu')(logits)
             if seq_dnase_fc_layer_dropout > 0:
-                logits = Dropout(dropout)(logits)
+                logits = Dropout(seq_dnase_fc_layer_dropout)(logits)
 
         # merge in tss+dhs counts, tss tpms and fully connected
         logits = Merge(mode='concat', concat_axis=-1)([
@@ -297,8 +297,8 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
             if batch_norm:
                 logits = BatchNormalization()(logits)
             logits = Activation('relu')(logits)
-            if seq_dnase_fc_layer_dropout > 0:
-                logits = Dropout(dropout)(logits)
+            if final_fc_dropout > 0:
+                logits = Dropout(final_fc_dropout)(logits)
 
         logits = Dense(shapes['labels'][-1])(logits)
         logits = Activation('sigmoid')(logits)

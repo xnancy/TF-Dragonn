@@ -1,9 +1,11 @@
-from __future__ import absolute_import, division, print_function
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
-from builtins import zip
 import numpy as np
 import os
 import psutil
+import six
 
 from keras import backend as K, optimizers
 from keras.objectives import binary_crossentropy
@@ -11,6 +13,7 @@ from keras.utils.generic_utils import Progbar
 
 from metrics import ClassificationResult, AMBIG_LABEL
 import io_utils
+
 
 def build_masked_loss(loss_function, mask_value=AMBIG_LABEL):
     def binary_crossentropy(y_true, y_pred):
@@ -31,7 +34,7 @@ class ClassifierTrainer(object):
                  early_stopping_metric='auPRC', early_stopping_patience=5,
                  task_names=None):
         self.optimizer = optimizer
-        self.lr= lr
+        self.lr = lr
         self.batch_size = batch_size
         self.epoch_size = epoch_size
         self.num_epochs = num_epochs
@@ -51,30 +54,45 @@ class ClassifierTrainer(object):
 
         self.compile(model)
 
-        iterator_num_epochs = int(self.epoch_size / train_queue.num_examples * self.num_epochs) + 1
-        train_iterator = io_utils.ExampleQueueIterator(train_queue, batch_size=self.batch_size, num_epochs=iterator_num_epochs)
+        def get_rss_prop():  # this is quite expensive
+            return (process.memory_info().rss - process.memory_info().shared) / 10**6
+
+        train_iterator = io_utils.ExampleQueueIterator(
+            train_queue, num_exs_batch=self.batch_size,
+            num_epochs=self.num_epochs, num_exs_epoch=self.epoch_size)
+
         valid_metrics = []
         best_metric = np.inf if self.early_stopping_metric == 'Loss' else -np.inf
         batches_per_epoch = int(self.epoch_size / self.batch_size)
         samples_per_epoch = self.batch_size * batches_per_epoch
-        for epoch in range(1, self.num_epochs + 1):
+
+        for epoch in six.xrange(1, self.num_epochs + 1):
             progbar = Progbar(target=samples_per_epoch)
-            for batch_indxs in xrange(1, batches_per_epoch + 1):
+            rss_minus_shr_memory = get_rss_prop()
+
+            for batch_indxs in six.xrange(1, batches_per_epoch + 1):
                 batch = train_iterator.next()
                 batch_loss = model.model.train_on_batch(batch, batch['labels'])
-                rss_minus_shr_memory = (process.memory_info().rss -  process.memory_info().shared)  / 10**6
+
+                if batch_indxs % 50 == 0:
+                    rss_minus_shr_memory = rss_minus_shr_memory = get_rss_prop()
+
                 progbar.update(batch_indxs * self.batch_size,
-                               values=[("loss", batch_loss), ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+                               values=[("loss", batch_loss),
+                                       ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
 
             epoch_valid_metrics = self.test(model, valid_queue)
             valid_metrics.append(epoch_valid_metrics)
             if verbose:
                 print('\nEpoch {}:'.format(epoch))
-                print('Metrics across all datasets:\n{}\n'.format(epoch_valid_metrics), end='')
-            current_metric = epoch_valid_metrics[self.early_stopping_metric].mean()
+                print('Metrics across all datasets:\n{}\n'.format(
+                    epoch_valid_metrics), end='')
+            current_metric = epoch_valid_metrics[
+                self.early_stopping_metric].mean()
             if (self.early_stopping_metric == 'Loss') == (current_metric <= best_metric):
                 if verbose:
-                    print('New best {}. Saving model.\n'.format(self.early_stopping_metric))
+                    print('New best {}. Saving model.\n'.format(
+                        self.early_stopping_metric))
                 best_metric = current_metric
                 best_epoch = epoch
                 early_stopping_wait = 0
@@ -84,16 +102,17 @@ class ClassifierTrainer(object):
                 if early_stopping_wait >= self.early_stopping_patience:
                     break
                 early_stopping_wait += 1
-        if verbose: # end of training messages
+        if verbose:  # end of training messages
             print('Finished training after {} epochs.'.format(epoch))
             if save_best_model_to_prefix is not None:
                 print("The best model's architecture and weights (from epoch {0}) "
                       'were saved to {1}.arch.json and {1}.weights.h5'.format(
-                    best_epoch, save_best_model_to_prefix))
+                          best_epoch, save_best_model_to_prefix))
 
     def test(self, model, queue, verbose=True):
-        iterator = io_utils.ExampleQueueIterator(queue, batch_size=self.batch_size, num_epochs=1)
-        num_batches = int(iterator.num_examples / self.batch_size)
+        iterator = io_utils.ExampleQueueIterator(
+            queue, batch_size=self.batch_size, num_epochs=1)
+        num_batches = int(np.floor(iterator.num_examples / self.batch_size))
         num_samples = self.batch_size * num_batches
         if verbose:
             process = psutil.Process(os.getpid())
@@ -105,8 +124,10 @@ class ClassifierTrainer(object):
             predictions.append(np.vstack(model.model.predict_on_batch(batch)))
             labels.append(batch['labels'])
             if verbose:
-                rss_minus_shr_memory = (process.memory_info().rss -  process.memory_info().shared)  / 10**6
-                progbar.update(batch_indx * self.batch_size, values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+                rss_minus_shr_memory = (
+                    process.memory_info().rss - process.memory_info().shared) / 10**6
+                progbar.update(batch_indx * self.batch_size,
+                               values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
         del iterator
 
         predictions = np.vstack(predictions)

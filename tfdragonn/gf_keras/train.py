@@ -8,14 +8,12 @@ import argparse
 import os
 import logging
 import shutil
-import numpy as np
 
 from keras import backend as K
 import tensorflow as tf
 
-from tfdragonn.tensorflow import database
+import database
 import genomeflow_interface
-import io_utils
 import models
 import trainers
 
@@ -66,6 +64,7 @@ def main():
     train_tf_dragonn(args.dataset_params_file, args.interval_params_file,
                      args.model_params_file, args.logdir, args.visiblegpus)
 
+
 def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
     datasetspec = os.path.abspath(datasetspec)
@@ -113,23 +112,24 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
 
     train_queue = data_interface.get_train_queue()
     validation_queue = data_interface.get_validation_queue(
-                        num_epochs=None, asynchronous_enqueues=False) # TODO: make this work with num_epochs=1
+        num_epochs=None, asynchronous_enqueues=False)  # TODO: make this work with num_epochs=1
 
     logging.info('compiling model')
     model = models.model_from_config(modelspec)
     trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
-                                       optimizer='adam',
-                                       lr=0.0003,
-                                       batch_size=BATCH_SIZE,
-                                       epoch_size=EPOCH_SIZE,
-                                       num_epochs=100,
-                                       early_stopping_metric=EARLYSTOPPING_KEY,
-                                       early_stopping_patience=EARLYSTOPPING_PATIENCE)
+                                         optimizer='adam',
+                                         lr=0.0003,
+                                         batch_size=BATCH_SIZE,
+                                         epoch_size=EPOCH_SIZE,
+                                         num_epochs=100,
+                                         early_stopping_metric=EARLYSTOPPING_KEY,
+                                         early_stopping_patience=EARLYSTOPPING_PATIENCE)
     trainer.compile(model)
 
     logging.info('training model')
     trainer.train(model, train_queue, validation_queue,
                   save_best_model_to_prefix="{}/model".format(logdir))
+
 
 if __name__ == '__main__':
     main()

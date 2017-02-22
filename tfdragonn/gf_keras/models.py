@@ -1,9 +1,9 @@
-from __future__ import absolute_import, division, print_function
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 from abc import abstractmethod, abstractproperty, ABCMeta
-from builtins import zip
 import json
-import numpy as np
 import sys
 
 from keras.layers import (
@@ -11,6 +11,7 @@ from keras.layers import (
     Activation, Dense, Dropout, Flatten, Permute
 )
 from keras.models import Model
+
 
 def model_from_config(model_config_file_path):
     """Load a model from a json config file."""
@@ -54,11 +55,14 @@ class SequenceClassifier(Classifier):
         assert len(num_filters) == len(conv_width)
 
         self.num_tasks = num_tasks
-        seq_inputs = Input(shape=(4, interval_size), name="data/genome_data_dir")
+        seq_inputs = Input(shape=(4, interval_size),
+                           name="data/genome_data_dir")
         seq_preds = seq_inputs
-        seq_preds = Permute((2, 1))(seq_preds) # conv1d expects (interval_size, 4)
+        # conv1d expects (interval_size, 4)
+        seq_preds = Permute((2, 1))(seq_preds)
         for i, (nb_filter, nb_col) in enumerate(zip(num_filters, conv_width)):
-            seq_preds = Convolution1D(nb_filter, nb_col, 'he_normal')(seq_preds)
+            seq_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(seq_preds)
             seq_preds = Activation('relu')(seq_preds)
             if dropout > 0:
                 seq_preds = Dropout(dropout)(seq_preds)

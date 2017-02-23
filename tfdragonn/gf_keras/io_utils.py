@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.training import coordinator
 
 
 class ExampleQueueIterator(object):
@@ -27,7 +28,8 @@ class ExampleQueueIterator(object):
         session.run(tf.local_variables_initializer())
 
         print "*****START QUEUE RUNNERS*****"
-        queue_runner_threads = tf.train.start_queue_runners(session)
+        self._coord = coordinator.Coordinator()
+        self._queue_runner_threads = tf.train.start_queue_runners(session, self._coord)
 
         self._batch_size = num_exs_batch
         self._session = session
@@ -53,6 +55,7 @@ class ExampleQueueIterator(object):
     def next(self):
         if self._len is not None:
             if self._num_examples_left <= 0:
+                self.close()
                 raise StopIteration
 
             self._num_examples_left -= self._batch_size
@@ -66,6 +69,10 @@ class ExampleQueueIterator(object):
                 pass
 
         return batch
+
+    def close(self):
+        self._coord.request_stop()
+        self._coord.join(self._queue_runner_threads)
 
     def __next__(self):
         return self.next()

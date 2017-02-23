@@ -63,7 +63,7 @@ class ClassifierTrainer(object):
 
         valid_metrics = []
         best_metric = np.inf if self.early_stopping_metric == 'Loss' else -np.inf
-        batches_per_epoch = int(self.epoch_size / self.batch_size)
+        batches_per_epoch = int(np.floor(self.epoch_size / self.batch_size))
         samples_per_epoch = self.batch_size * batches_per_epoch
 
         for epoch in six.moves.range(1, self.num_epochs + 1):
@@ -102,6 +102,9 @@ class ClassifierTrainer(object):
                 if early_stopping_wait >= self.early_stopping_patience:
                     break
                 early_stopping_wait += 1
+
+        train_iterator.close()
+
         if verbose:  # end of training messages
             print('Finished training after {} epochs.'.format(epoch))
             if save_best_model_to_prefix is not None:
@@ -109,9 +112,10 @@ class ClassifierTrainer(object):
                       'were saved to {1}.arch.json and {1}.weights.h5'.format(
                           best_epoch, save_best_model_to_prefix))
 
+
     def test(self, model, queue, verbose=True):
         iterator = io_utils.ExampleQueueIterator(
-            queue, batch_size=self.batch_size, num_epochs=1)
+            queue, num_exs_batch=self.batch_size, num_epochs=1)
         num_batches = int(np.floor(iterator.num_examples / self.batch_size))
         num_samples = self.batch_size * num_batches
         if verbose:
@@ -128,6 +132,7 @@ class ClassifierTrainer(object):
                     process.memory_info().rss - process.memory_info().shared) / 10**6
                 progbar.update(batch_indx * self.batch_size,
                                values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+        iterator.close()
         del iterator
 
         predictions = np.vstack(predictions)

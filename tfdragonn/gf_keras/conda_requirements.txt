@@ -24,6 +24,7 @@ get_terminal_size=1.0.0=py27_0
 glib=2.43.0=1
 gst-plugins-base=1.8.0=0
 gstreamer=1.8.0=0
+h5py=2.6.0=np111py27_2
 htslib=1.3.1=1
 icu=54.1=0
 ipykernel=4.5.2=py27_0

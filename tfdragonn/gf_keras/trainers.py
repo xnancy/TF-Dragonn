@@ -5,7 +5,7 @@ from __future__ import print_function
 import numpy as np
 import os
 import psutil
-import six
+import six.moves
 
 from keras import backend as K, optimizers
 from keras.objectives import binary_crossentropy
@@ -66,11 +66,11 @@ class ClassifierTrainer(object):
         batches_per_epoch = int(self.epoch_size / self.batch_size)
         samples_per_epoch = self.batch_size * batches_per_epoch
 
-        for epoch in six.xrange(1, self.num_epochs + 1):
+        for epoch in six.moves.range(1, self.num_epochs + 1):
             progbar = Progbar(target=samples_per_epoch)
             rss_minus_shr_memory = get_rss_prop()
 
-            for batch_indxs in six.xrange(1, batches_per_epoch + 1):
+            for batch_indxs in six.moves.range(1, batches_per_epoch + 1):
                 batch = train_iterator.next()
                 batch_loss = model.model.train_on_batch(batch, batch['labels'])
 

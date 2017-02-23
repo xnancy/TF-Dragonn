@@ -103,6 +103,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     session_config = tf.ConfigProto()
     session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
     session_config.gpu_options.per_process_gpu_memory_fraction = GPU_MEM_PROP
+    session_config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
     session = tf.Session(config=session_config)
     K.set_session(session)
 

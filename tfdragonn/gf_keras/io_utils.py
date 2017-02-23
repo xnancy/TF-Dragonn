@@ -18,7 +18,7 @@ class ExampleQueueIterator(object):
         If num_exs_epoch is None, use queue.num_examples as num_exs_epoch. Else,
             use num_exs_epoch as the epoch size.
         """
-        queue_outputs = queue.dequeue_many(batch_size)
+        queue_outputs = queue.dequeue_many(num_exs_batch)
 
         # Run queue on the CPU only (use 0 GPUs)
         config = tf.ConfigProto(device_count={'GPU': 0})
@@ -71,5 +71,6 @@ class ExampleQueueIterator(object):
         return self.next()
 
     def __del__(self):
-        if self._session:
-            self._session.close()
+        sess = getattr(self, "_session", None)
+        if sess is not None:
+            sess.close()

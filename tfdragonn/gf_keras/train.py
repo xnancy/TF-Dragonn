@@ -103,7 +103,6 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     session_config = tf.ConfigProto()
     session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
     session_config.gpu_options.per_process_gpu_memory_fraction = GPU_MEM_PROP
-    session_config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
     session = tf.Session(config=session_config)
     K.set_session(session)
 
@@ -116,6 +115,8 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
         num_epochs=None, asynchronous_enqueues=False)  # TODO: make this work with num_epochs=1
 
     logging.info('compiling model')
+    # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
+    # with jit_scope():
     model = models.model_from_config_and_queue(modelspec, train_queue)
     trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
                                          optimizer='adam',

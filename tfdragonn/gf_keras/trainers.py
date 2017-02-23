@@ -74,12 +74,12 @@ class ClassifierTrainer(object):
                 batch = train_iterator.next()
                 batch_loss = model.model.train_on_batch(batch, batch['labels'])
 
-                if batch_indxs % 50 == 0:
+                if batch_indxs % 100 == 0:
                     rss_minus_shr_memory = rss_minus_shr_memory = get_rss_prop()
 
-                progbar.update(batch_indxs * self.batch_size,
-                               values=[("loss", batch_loss),
-                                       ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+                    progbar.update(batch_indxs * self.batch_size,
+                                   values=[("loss", batch_loss),
+                                           ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
 
             epoch_valid_metrics = self.test(model, valid_queue)
             valid_metrics.append(epoch_valid_metrics)

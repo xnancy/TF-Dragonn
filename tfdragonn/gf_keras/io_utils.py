@@ -12,14 +12,18 @@ class ExampleQueueIterator(object):
     def num_examples(self):
         return self._queue.num_examples
 
-    def __init__(self, queue, num_exs_batch=128, num_epochs=None, num_exs_epoch=None):
+    def __init__(self, queue, num_exs_batch=128, num_epochs=None, num_exs_epoch=None,
+                 allow_smaller_final_batch=False):
         """
         If num_epochs is set, limit number of epochs to iterate over.
 
         If num_exs_epoch is None, use queue.num_examples as num_exs_epoch. Else,
             use num_exs_epoch as the epoch size.
         """
-        queue_outputs = queue.dequeue_many(num_exs_batch)
+        if allow_smaller_final_batch:
+            queue_outputs = queue.dequeue_up_to(num_exs_batch)
+        else:
+            queue_outputs = queue.dequeue_many(num_exs_batch)
 
         # Run queue on the CPU only (use 0 GPUs)
         config = tf.ConfigProto(device_count={'GPU': 0})
@@ -40,10 +44,11 @@ class ExampleQueueIterator(object):
             num_exs_epoch = self._queue.num_examples
         self._epoch_size = num_exs_epoch
 
-        if num_epochs is not None:
-            self._len = num_epochs * self._epoch_size
-        else:
+        if num_epochs is None:
             self._len = None
+        else:
+            self._len = num_epochs * self._epoch_size
+
         self._num_examples_left = self._len
 
     def __len__(self):
@@ -58,21 +63,16 @@ class ExampleQueueIterator(object):
                 self.close()
                 raise StopIteration
 
-            self._num_examples_left -= self._batch_size
+        batch = self._session.run(self._queue_outputs)
 
-        batch = None
-
-        while batch is None:
-            try:
-                batch = self._session.run(self._queue_outputs)
-            except tf.errors.OutOfRangeError:
-                pass
-
+        self._num_examples_left -= batch.values()[0].shape[0]
         return batch
 
     def close(self):
-        self._coord.request_stop()
-        self._coord.join(self._queue_runner_threads)
+        coord = getattr(self, "_coord", None)
+        if coord is not None:
+            self._coord.request_stop()
+            self._coord.join(self._queue_runner_threads)
 
     def __next__(self):
         return self.next()

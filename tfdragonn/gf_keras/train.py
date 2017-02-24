@@ -111,8 +111,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
         datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
 
     train_queue = data_interface.get_train_queue()
-    validation_queue = data_interface.get_validation_queue(
-        num_epochs=None, asynchronous_enqueues=False)  # TODO: make this work with num_epochs=1
+    validation_queue = data_interface.get_validation_queue()
 
     logging.info('compiling model')
     # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope

@@ -32,7 +32,7 @@ class ClassifierTrainer(object):
     def __init__(self, optimizer='adam', lr=0.0003, batch_size=128,
                  epoch_size=250000, num_epochs=100,
                  early_stopping_metric='auPRC', early_stopping_patience=5,
-                 task_names=None):
+                 task_names=None, logger=None):
         self.optimizer = optimizer
         self.lr = lr
         self.batch_size = batch_size
@@ -41,6 +41,7 @@ class ClassifierTrainer(object):
         self.early_stopping_metric = early_stopping_metric
         self.early_stopping_patience = early_stopping_patience
         self.task_names = task_names
+        self.logger = logger
 
     def compile(self, model):
         loss_func = masked_binary_crossentropy()
@@ -50,6 +51,13 @@ class ClassifierTrainer(object):
 
     def train(self, model, train_queue, valid_queue,
               save_best_model_to_prefix=None, verbose=True):
+        self.logger.info('optimizer: {}'.format(self.optimizer))
+        self.logger.info('learning rate: {}'.format(self.lr))
+        self.logger.info('batch size: {}'.format(self.batch_size))
+        self.logger.info('epoch size: {}'.format(self.epoch_size))
+        self.logger.info('max num of epochs: {}'.format(self.num_epochs))
+        self.logger.info('early stopping metrics: {}'.format(self.early_stopping_metric))
+        self.logger.info('early stopping patience: {}'.format(self.early_stopping_patience))
         process = psutil.Process(os.getpid())
 
         self.compile(model)
@@ -81,17 +89,17 @@ class ClassifierTrainer(object):
                                    values=[("loss", batch_loss),
                                            ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
 
-            epoch_valid_metrics = self.test(model, valid_queue)
+            epoch_valid_metrics = self.test(model, valid_queue, test_size=1000000)
             valid_metrics.append(epoch_valid_metrics)
             if verbose:
-                print('\nEpoch {}:'.format(epoch))
-                print('Metrics across all datasets:\n{}\n'.format(
-                    epoch_valid_metrics), end='')
+                self.logger.info('\nEpoch {}:'.format(epoch))
+                self.logger.info('Metrics across all datasets:\n{}\n'.format(
+                    epoch_valid_metrics))
             current_metric = epoch_valid_metrics[
                 self.early_stopping_metric].mean()
             if (self.early_stopping_metric == 'Loss') == (current_metric <= best_metric):
                 if verbose:
-                    print('New best {}. Saving model.\n'.format(
+                    self.logger.info('New best {}. Saving model.\n'.format(
                         self.early_stopping_metric))
                 best_metric = current_metric
                 best_epoch = epoch
@@ -106,18 +114,21 @@ class ClassifierTrainer(object):
         train_iterator.close()
 
         if verbose:  # end of training messages
-            print('Finished training after {} epochs.'.format(epoch))
+            self.logger.info('Finished training after {} epochs.'.format(epoch))
             if save_best_model_to_prefix is not None:
-                print("The best model's architecture and weights (from epoch {0}) "
-                      'were saved to {1}.arch.json and {1}.weights.h5'.format(
-                          best_epoch, save_best_model_to_prefix))
+                self.logger.info("The best model's architecture and weights (from epoch {0}) "
+                                 'were saved to {1}.arch.json and {1}.weights.h5'.format(
+                                     best_epoch, save_best_model_to_prefix))
 
-
-    def test(self, model, queue, verbose=True):
+    def test(self, model, queue, batch_size=1000, verbose=True, test_size=None):
         iterator = io_utils.ExampleQueueIterator(
-            queue, num_exs_batch=self.batch_size, num_epochs=1)
-        num_batches = int(np.floor(iterator.num_examples / self.batch_size))
-        num_samples = self.batch_size * num_batches
+            queue, num_exs_batch=batch_size, num_epochs=1)
+        if test_size is not None:
+            num_examples = min(test_size, iterator.num_examples)
+            num_batches = int(np.floor(num_examples / batch_size))
+        else:
+            num_batches = int(np.floor(iterator.num_examples / batch_size))
+        num_samples = batch_size * num_batches
         if verbose:
             process = psutil.Process(os.getpid())
             progbar = Progbar(target=num_samples)
@@ -130,7 +141,7 @@ class ClassifierTrainer(object):
             if verbose:
                 rss_minus_shr_memory = (
                     process.memory_info().rss - process.memory_info().shared) / 10**6
-                progbar.update(batch_indx * self.batch_size,
+                progbar.update(batch_indx * batch_size,
                                values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
         iterator.close()
         del iterator

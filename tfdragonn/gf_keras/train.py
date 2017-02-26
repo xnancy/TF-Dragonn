@@ -7,6 +7,7 @@ from __future__ import print_function
 import argparse
 import os
 import logging
+import ntpath
 import shutil
 
 from keras import backend as K
@@ -16,6 +17,7 @@ import database
 import genomeflow_interface
 import models
 import trainers
+import loggers
 
 DIR_PREFIX = '/srv/scratch/tfbinding/'
 LOGDIR_PREFIX = '/srv/scratch/tfbinding/tf_logs/'
@@ -33,9 +35,11 @@ EARLYSTOPPING_PATIENCE = 4
 # EARLYSTOPPING_TOLERANCE = 1e-4
 
 IN_MEMORY = False
-BATCH_SIZE = 128
+# BATCH_SIZE = 128
+BATCH_SIZE = 256
 EPOCH_SIZE = 250000
-# EPOCH_SIZE = 5000
+# EPOCH_SIZE = 2500000 
+#EPOCH_SIZE = 5000000
 
 # TF Session Settings
 DEFER_DELETE_SIZE = int(250 * 1e6)  # 250MB
@@ -88,17 +92,24 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     os.makedirs(logdir)
     run_id = str(logdir.lstrip(LOGDIR_PREFIX))
 
-    logging.info('dataspec file: {}'.format(datasetspec))
-    logging.info('intervalspec file: {}'.format(intervalspec))
-    logging.info('logdir path: {}'.format(logdir))
-    logging.info('visiblegpus string: {}'.format(visiblegpus))
+    logger.info('dataspec file: {}'.format(datasetspec))
+    logger.info('intervalspec file: {}'.format(intervalspec))
+    logger.info('logdir path: {}'.format(logdir))
+    logger.info('visiblegpus string: {}'.format(visiblegpus))
 
-    logging.info('registering with tfdragonn database')
+    # copy datasetspec, intervalspec, and models params to log dir
+    for fname in [datasetspec, intervalspec, modelspec]:
+        shutil.copyfile(fname, os.path.join(logdir, ntpath.basename(fname)))
+    # initialize logger for training
+    loggers.setup_logger('trainer', os.path.join(logdir, "metrics.log"))
+    trainer_logger = logging.getLogger('trainer')
+
+    logger.info('registering with tfdragonn database')
     metadata = {}  # TODO(cprobert): save metadata here
     database.add_run(run_id, datasetspec, intervalspec,
                      modelspec, logdir, metadata)
 
-    logging.info("Setting up keras session")
+    logger.info("Setting up keras session")
     os.environ['CUDA_VISIBLE_DEVICES'] = str(visiblegpus)
     session_config = tf.ConfigProto()
     session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
@@ -106,15 +117,14 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     session = tf.Session(config=session_config)
     K.set_session(session)
 
-    logging.info('Setting up genomeflow queues')
+    logger.info('Setting up genomeflow queues')
     data_interface = genomeflow_interface.GenomeFlowInterface(
         datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
-
     train_queue = data_interface.get_train_queue()
     validation_queue = data_interface.get_validation_queue(
         num_epochs=None, asynchronous_enqueues=False)  # TODO: make this work with num_epochs=1
 
-    logging.info('compiling model')
+    logger.info('initializing  model and trainer')
     # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
     # with jit_scope():
     model = models.model_from_config_and_queue(modelspec, train_queue)
@@ -125,12 +135,11 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
                                          epoch_size=EPOCH_SIZE,
                                          num_epochs=100,
                                          early_stopping_metric=EARLYSTOPPING_KEY,
-                                         early_stopping_patience=EARLYSTOPPING_PATIENCE)
-    trainer.compile(model)
-
-    logging.info('training model')
+                                         early_stopping_patience=EARLYSTOPPING_PATIENCE,
+                                         logger=trainer_logger)
+    logger.info('training model')
     trainer.train(model, train_queue, validation_queue,
-                  save_best_model_to_prefix="{}/model".format(logdir))
+                  save_best_model_to_prefix=os.path.join(logdir, "model"))
 
 
 if __name__ == '__main__':

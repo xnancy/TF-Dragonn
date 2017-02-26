@@ -2,6 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from sklearn import utils
+
 import genomeflow as gf
 
 import datasets
@@ -37,7 +39,7 @@ class GenomeFlowInterface(object):
 
     def __init__(self, datasetspec, intervalspec, modelspec,
                  validation_chroms=[], holdout_chroms=[],
-                 shuffle=True, pos_sampling_rate=None):
+                 shuffle=True, pos_sampling_rate=0.05):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
         self.modelspec = modelspec
@@ -93,11 +95,19 @@ class GenomeFlowInterface(object):
         intervals = dataset['intervals']
         inputs = dataset['inputs']
         labels = dataset['labels']
-
+        if shuffle: # shuffle intervals and labels
+            chroms = intervals['chrom']
+            starts = intervals['start']
+            ends = intervals['end']
+            chroms, starts, ends, labels = utils.shuffle(
+                chroms, starts, ends, labels, random_state=0)
+            intervals = {'chrom': chroms, 'start': starts, 'end': ends}
         if pos_sampling_rate is not None:
             # construct separate interval queues for positive and negative intervals
             pos_indxs = labels == 1
             neg_indxs = labels == 0
+
+            neg_indxs[20000000:] = False # temporary hack to overcome 2Gb limit
 
             pos_labels = labels[pos_indxs][:, None] # assumes single task labels!
             neg_labels = labels[neg_indxs][:, None]
@@ -110,18 +120,24 @@ class GenomeFlowInterface(object):
 
             pos_interval_queue = gf.io.IntervalQueue(
                 pos_intervals, pos_labels, name='{}-pos-interval-queue'.format(dataset_id),
-                num_epochs=num_epochs, capacity=10000, shuffle=False, summary=True)
+                num_epochs=num_epochs, capacity=50000, min_after_dequeue=40000,
+                shuffle=shuffle, summary=True)
             neg_interval_queue = gf.io.IntervalQueue(
                 neg_intervals, neg_labels, name='{}-neg-interval-queue'.format(dataset_id),
-                num_epochs=num_epochs, capacity=10000, shuffle=False, summary=True)
+                num_epochs=num_epochs, capacity=50000, min_after_dequeue=40000,
+                shuffle=shuffle, summary=True)
 
             # sample from both queues using a shared intervals queue
             interval_queue_ratios = {pos_interval_queue: pos_sampling_rate,
                                      neg_interval_queue: 1 - pos_sampling_rate}
             interval_queue = gf.io.SharedIntervalQueue(
                 interval_queue_ratios, name='{}-shared-interval-queue'.format(dataset_id),
-                capacity=50000, shuffle=shuffle, min_after_dequeue=40000)
+                capacity=50000)
         else:
+            # temporary hack to overcome 2Gb limit
+            labels = labels[:20000000]
+            intervals = {k: v[:20000000] for k, v in intervals.items()}
+
             interval_queue = gf.io.IntervalQueue(
                 intervals, labels, name='{}-interval-queue'.format(dataset_id),
                 num_epochs=num_epochs, capacity=50000, shuffle=shuffle,

@@ -25,11 +25,6 @@ LOGDIR_PREFIX = '/srv/scratch/tfbinding/tf_logs/'
 HOLDOUT_CHROMS = ['chr1', 'chr8', 'chr21']
 VALID_CHROMS = ['chr9']
 
-"""
-TRAIN_DIRNAME = 'train'
-VALID_DIRNAME = 'valid'
-"""
-
 EARLYSTOPPING_KEY = 'auPRC'
 EARLYSTOPPING_PATIENCE = 4
 # EARLYSTOPPING_TOLERANCE = 1e-4
@@ -51,22 +46,34 @@ logging.basicConfig(
 logger = logging.getLogger('train-wrapper')
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('dataset_params_file', type=os.path.abspath,
-                        help='Dataset parameters json file path')
-    parser.add_argument('interval_params_file', type=os.path.abspath,
-                        help='Interval parameters json file path')
-    parser.add_argument('model_params_file', type=os.path.abspath,
-                        help='Model parameters json file path')
-    parser.add_argument('logdir', type=os.path.abspath,
-                        help='Log directory, also used as globally unique run identifier')
-    parser.add_argument('--visiblegpus', type=str,
-                        required=True, help='Visible GPUs string')
-    args = parser.parse_args()
+def parse_args():
+    parser = argparse.ArgumentParser('main TF-DragoNN script')
+    subparsers = parser.add_subparsers(help='tf-dragonn command help', dest='command')
 
-    train_tf_dragonn(args.dataset_params_file, args.interval_params_file,
-                     args.model_params_file, args.logdir, args.visiblegpus)
+    train_parser = subparsers.add_parser('train', help="main training script")
+    train_parser.add_argument('datasetspec', type=os.path.abspath,
+                        help='Dataset parameters json file path')
+    train_parser.add_argument('intervalspec', type=os.path.abspath,
+                        help='Interval parameters json file path')
+    train_parser.add_argument('modelspec', type=os.path.abspath,
+                        help='Model parameters json file path')
+    train_parser.add_argument('logdir', type=os.path.abspath,
+                        help='Log directory, also used as globally unique run identifier')
+    train_parser.add_argument('--visiblegpus', type=str,
+                        required=True, help='Visible GPUs string')
+
+    test_parser = subparsers.add_parser('test', help="main testing script")
+    test_parser.add_argument('logdir', type=os.path.abspath,
+                        help='Log directory, also used as globally unique run identifier')
+    test_parser.add_argument('--visiblegpus', type=str,
+                        required=True, help='Visible GPUs string')
+    test_parser.add_argument('--test-size', type=int,
+                             help='Limit test size, full test otherwise.')
+
+    args = vars(parser.parse_args())
+    command = args.pop("command", None)
+
+    return command, args
 
 
 def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
@@ -98,8 +105,10 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     logger.info('visiblegpus string: {}'.format(visiblegpus))
 
     # copy datasetspec, intervalspec, and models params to log dir
-    for fname in [datasetspec, intervalspec, modelspec]:
-        shutil.copyfile(fname, os.path.join(logdir, ntpath.basename(fname)))
+    shutil.copyfile(datasetspec, os.path.join(logdir, ntpath.basename('datasetspec.json')))
+    shutil.copyfile(intervalspec, os.path.join(logdir, ntpath.basename('intervalspec.json')))
+    shutil.copyfile(modelspec, os.path.join(logdir, ntpath.basename('modelspec.json')))
+
     # initialize logger for training
     loggers.setup_logger('trainer', os.path.join(logdir, "metrics.log"))
     trainer_logger = logging.getLogger('trainer')
@@ -139,6 +148,55 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     logger.info('training model')
     trainer.train(model, train_queue, validation_queue,
                   save_best_model_to_prefix=os.path.join(logdir, "model"))
+
+
+def test_tf_dragonn(logdir, visiblegpus, test_size=None):
+    logdir = os.path.abspath(logdir)
+    assert(os.path.exists(logdir))
+    assert(logdir.startswith(LOGDIR_PREFIX))
+
+    datasetspec = os.path.join(logdir, 'datasetspec.json')
+    assert(os.path.isfile(datasetspec))
+
+    intervalspec = os.path.join(logdir, 'intervalspec.json')
+    assert(os.path.isfile(intervalspec))
+
+    modelspec = os.path.join(logdir, 'modelspec.json')
+    assert(os.path.isfile(modelspec))
+
+    logger.info('dataspec file: {}'.format(datasetspec))
+    logger.info('intervalspec file: {}'.format(intervalspec))
+    logger.info('logdir path: {}'.format(logdir))
+    logger.info('visiblegpus string: {}'.format(visiblegpus))
+
+    logger.info("Setting up keras session")
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(visiblegpus)
+    session_config = tf.ConfigProto()
+    session_config.gpu_options.deferred_deletion_bytes = DEFER_DELETE_SIZE
+    session_config.gpu_options.per_process_gpu_memory_fraction = GPU_MEM_PROP
+    session = tf.Session(config=session_config)
+    K.set_session(session)
+
+    logger.info('Setting up genomeflow queues')
+    data_interface = genomeflow_interface.GenomeFlowInterface(
+        datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
+    validation_queue = data_interface.get_validation_queue()
+
+    logger.info('loading  model and trainer')
+    model = models.model_from_config_and_queue(modelspec, validation_queue)
+    model.load_weights(os.path.join(logdir, 'model.weights.h5'))
+    trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names)
+
+    logger.info('testing model')
+    classification_result = trainer.test(model, validation_queue, test_size=test_size)
+    logger.info(classification_result)
+
+
+def main():
+    command_functions = {'train': train_tf_dragonn,
+                         'test': test_tf_dragonn}
+    command, args = parse_args()
+    command_functions[command](**args)
 
 
 if __name__ == '__main__':

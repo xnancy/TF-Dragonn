@@ -106,6 +106,9 @@ class Classifier(object):
         open(arch_fname, 'w').write(self.model.to_json())
         self.model.save_weights(weights_fname, overwrite=True)
 
+    def load_weights(self, filepath):
+        self.model.load_weights(filepath)
+
     def get_keras_inputs(self, shapes):
         """Returns dictionary of named keras inputs"""
         return collections.OrderedDict(

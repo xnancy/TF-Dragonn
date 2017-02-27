@@ -106,6 +106,9 @@ class Classifier(object):
         open(arch_fname, 'w').write(self.model.to_json())
         self.model.save_weights(weights_fname, overwrite=True)
 
+    def load_weights(self, filepath):
+        self.model.load_weights(filepath)
+
     def get_keras_inputs(self, shapes):
         """Returns dictionary of named keras inputs"""
         return collections.OrderedDict(
@@ -162,10 +165,10 @@ class SequenceAndDnaseClassifier(Classifier):
                  num_combined_filters=(55,), combined_conv_width=(25,),
                  pool_width=25,
                  fc_layer_widths=(100,),
-                 seq_conv_dropout=0.1,
-                 dnase_conv_dropout=0.1,
-                 combined_conv_dropout=0.1,
-                 fc_layer_dropout=0.1,
+                 seq_conv_dropout=0.0,
+                 dnase_conv_dropout=0.0,
+                 combined_conv_dropout=0.0,
+                 fc_layer_dropout=0.0,
                  batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
@@ -231,11 +234,11 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
                  pool_width=25,
                  seq_dnase_fc_layer_widths=(100,),
                  final_fc_layer_widths=(100,),
-                 seq_conv_dropout=0.1,
-                 dnase_conv_dropout=0.1,
-                 combined_conv_dropout=0.1,
-                 seq_dnase_fc_layer_dropout=0.1,
-                 final_fc_dropout=0.1,
+                 seq_conv_dropout=0,
+                 dnase_conv_dropout=0,
+                 combined_conv_dropout=0,
+                 seq_dnase_fc_layer_dropout=0,
+                 final_fc_dropout=0,
                  batch_norm=False):
         assert len(num_seq_filters) == len(seq_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)

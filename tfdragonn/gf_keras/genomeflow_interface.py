@@ -69,35 +69,31 @@ class GenomeFlowInterface(object):
                               shuffle=self.shuffle)
 
     def get_validation_queue(self, num_epochs=1, asynchronous_enqueues=False,
-                             enqueue_batch_size=1, num_internal_threads=4):
+                             enqueues_per_thread=[128, 1]):
         return self.get_queue(
             self.validation_dataset, num_epochs, asynchronous_enqueues,
-            input_names=self.input_names, enqueue_batch_size=1,
-            num_internal_threads=num_internal_threads)
+            input_names=self.input_names, enqueues_per_thread=enqueues_per_thread)
 
     def get_queue(self, dataset, num_epochs=None, asynchronous_enqueues=True,
                   pos_sampling_rate=None, input_names=None, shuffle=False,
-                  enqueue_batch_size=128, num_internal_threads=1):
+                  enqueues_per_thread=[128]):
         examples_queues = {
             dataset_id: self.get_example_queue(dataset_values, dataset_id,
                                                num_epochs=num_epochs,
                                                pos_sampling_rate=pos_sampling_rate,
                                                input_names=input_names,
                                                shuffle=shuffle,
-                                               enqueue_batch_size=enqueue_batch_size,
-                                               num_internal_threads=num_internal_threads)
+                                               enqueues_per_thread=enqueues_per_thread)
             for dataset_id, dataset_values in dataset.items()
         }
         shared_examples_queue = self.get_shared_examples_queue(
             examples_queues, asynchronous_enqueues=asynchronous_enqueues,
-            enqueue_batch_size=enqueue_batch_size,
-            num_internal_threads=num_internal_threads)
+            enqueues_per_thread=enqueues_per_thread)
         return shared_examples_queue
 
     def get_example_queue(self, dataset, dataset_id,
                           num_epochs=None, pos_sampling_rate=None,
-                          input_names=None, shuffle=False, enqueue_batch_size=128,
-                          num_internal_threads=1):
+                          input_names=None, shuffle=False, enqueues_per_thread=[128]):
         intervals = dataset['intervals']
         inputs = dataset['inputs']
         labels = dataset['labels']
@@ -134,7 +130,7 @@ class GenomeFlowInterface(object):
                 interval_queue_ratios, name='{}-shared-interval-queue'.format(
                     dataset_id),
                 capacity=50000, shuffle=shuffle, min_after_dequeue=40000,
-                enqueue_batch_size=enqueue_batch_size)
+                enqueue_batch_size=128)
         else:
             interval_queue = gf.io.IntervalQueue(
                 intervals, labels, name='{}-interval-queue'.format(dataset_id),
@@ -151,17 +147,15 @@ class GenomeFlowInterface(object):
                 k, v) for k, v in inputs.items()}
 
         examples_queue = gf.io.ExampleQueue(
-            interval_queue, data_sources, num_threads=num_internal_threads,
-            capacity=2048, name='{}-example-queue'.format(dataset_id),
-            enqueue_batch_size=enqueue_batch_size)
+            interval_queue, data_sources, enqueues_per_thread=enqueues_per_thread,
+            capacity=2048, name='{}-example-queue'.format(dataset_id))
 
         return examples_queue
 
     def get_shared_examples_queue(self, examples_queues, asynchronous_enqueues=True,
-                                  enqueue_batch_size=128, num_internal_threads=1):
+                                  enqueues_per_thread=[128]):
         shared_examples_queue = gf.io.MultiDatasetExampleQueue(
-            examples_queues, num_threads=num_internal_threads,
-            enqueue_batch_size=enqueue_batch_size,
+            examples_queues, enqueues_per_thread=enqueues_per_thread,
             capacity=2048, name='multi-dataset-example-queue',
             asynchronous_enqueues=asynchronous_enqueues)
         return shared_examples_queue

@@ -146,9 +146,9 @@ class ClassifierTrainer(object):
                 allow_smaller_final_batch=True)
             if test_size is not None:
                 num_examples = min(test_size, iterator.num_examples)
-                num_batches = int(np.floor(num_examples / batch_size))
             else:
-                num_batches = int(np.floor(iterator.num_examples / batch_size))
+                num_examples = iterator.num_examples
+            num_batches = int(np.floor(iterator.num_examples / batch_size))
 
             if verbose:
                 progbar = Progbar(target=num_examples)

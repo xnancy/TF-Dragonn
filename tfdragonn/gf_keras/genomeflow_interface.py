@@ -70,28 +70,36 @@ class GenomeFlowInterface(object):
                               input_names=self.input_names,
                               shuffle=self.shuffle)
 
-    def get_validation_queue(self, num_epochs=1, asynchronous_enqueues=False):
+    def get_validation_queue(self, num_epochs=1, asynchronous_enqueues=False,
+                             enqueue_batch_size=1, num_internal_threads=4):
         return self.get_queue(
             self.validation_dataset, num_epochs, asynchronous_enqueues,
-            input_names=self.input_names)
+            input_names=self.input_names, enqueue_batch_size=1,
+            num_internal_threads=num_internal_threads)
 
     def get_queue(self, dataset, num_epochs=None, asynchronous_enqueues=True,
-                  pos_sampling_rate=None, input_names=None, shuffle=False):
+                  pos_sampling_rate=None, input_names=None, shuffle=False,
+                  enqueue_batch_size=128, num_internal_threads=1):
         examples_queues = {
             dataset_id: self.get_example_queue(dataset_values, dataset_id,
                                                num_epochs=num_epochs,
                                                pos_sampling_rate=pos_sampling_rate,
                                                input_names=input_names,
-                                               shuffle=shuffle)
+                                               shuffle=shuffle,
+                                               enqueue_batch_size=enqueue_batch_size,
+                                               num_internal_threads=num_internal_threads)
             for dataset_id, dataset_values in dataset.items()
         }
         shared_examples_queue = self.get_shared_examples_queue(
-            examples_queues, asynchronous_enqueues=asynchronous_enqueues)
+            examples_queues, asynchronous_enqueues=asynchronous_enqueues,
+            enqueue_batch_size=enqueue_batch_size,
+            num_internal_threads=num_internal_threads)
         return shared_examples_queue
 
     def get_example_queue(self, dataset, dataset_id,
                           num_epochs=None, pos_sampling_rate=None,
-                          input_names=None, shuffle=False):
+                          input_names=None, shuffle=False, enqueue_batch_size=128,
+                          num_internal_threads=1):
         intervals = dataset['intervals']
         inputs = dataset['inputs']
         labels = dataset['labels']
@@ -103,16 +111,18 @@ class GenomeFlowInterface(object):
                 chroms, starts, ends, labels, random_state=0)
             intervals = {'chrom': chroms, 'start': starts, 'end': ends}
         if pos_sampling_rate is not None:
-            # construct separate interval queues for positive and negative intervals
+            # construct separate interval queues for positive and negative
+            # intervals
             pos_indxs = labels == 1
             neg_indxs = labels == 0
 
             neg_indxs[20000000:] = False # temporary hack to overcome 2Gb limit
 
-            pos_labels = labels[pos_indxs][:, None] # assumes single task labels!
+            # assumes single task labels!
+            pos_labels = labels[pos_indxs][:, None]
             neg_labels = labels[neg_indxs][:, None]
 
-            pos_indxs = pos_indxs.squeeze() # need 1d indices for interval arrays
+            pos_indxs = pos_indxs.squeeze()  # need 1d indices for interval arrays
             neg_indxs = neg_indxs.squeeze()
 
             pos_intervals = {k: v[pos_indxs] for k, v in intervals.items()}
@@ -131,8 +141,9 @@ class GenomeFlowInterface(object):
             interval_queue_ratios = {pos_interval_queue: pos_sampling_rate,
                                      neg_interval_queue: 1 - pos_sampling_rate}
             interval_queue = gf.io.SharedIntervalQueue(
-                interval_queue_ratios, name='{}-shared-interval-queue'.format(dataset_id),
-                capacity=50000)
+                interval_queue_ratios, name='{}-shared-interval-queue'.format(
+                    dataset_id),
+                capacity=50000, enqueue_batch_size=enqueue_batch_size)
         else:
             # temporary hack to overcome 2Gb limit
             labels = labels[:20000000]
@@ -143,23 +154,27 @@ class GenomeFlowInterface(object):
                 num_epochs=num_epochs, capacity=50000, shuffle=shuffle,
                 min_after_dequeue=40000, summary=True)
 
-        if input_names is not None: # use only these inputs in the example queue
-            assert all([input_name in inputs.keys() for input_name in input_names])
+        if input_names is not None:  # use only these inputs in the example queue
+            assert all([input_name in inputs.keys()
+                        for input_name in input_names])
             data_sources = {k: self.get_data_source(k, v) for k, v in inputs.items()
                             if k in input_names}
         else:
-            data_sources = {k: self.get_data_source(k, v) for k, v in inputs.items()}
+            data_sources = {k: self.get_data_source(
+                k, v) for k, v in inputs.items()}
 
         examples_queue = gf.io.ExampleQueue(
-            interval_queue, data_sources, num_threads=1,
-            enqueue_batch_size=128, capacity=2048,
-            name='{}-example-queue'.format(dataset_id))
+            interval_queue, data_sources, num_threads=num_internal_threads,
+            capacity=2048, name='{}-example-queue'.format(dataset_id),
+            enqueue_batch_size=enqueue_batch_size)
 
         return examples_queue
 
-    def get_shared_examples_queue(self, examples_queues, asynchronous_enqueues=True):
+    def get_shared_examples_queue(self, examples_queues, asynchronous_enqueues=True,
+                                  enqueue_batch_size=128, num_internal_threads=1):
         shared_examples_queue = gf.io.MultiDatasetExampleQueue(
-            examples_queues, num_threads=1, enqueue_batch_size=128,
+            examples_queues, num_threads=num_internal_threads,
+            enqueue_batch_size=enqueue_batch_size,
             capacity=2048, name='multi-dataset-example-queue',
             asynchronous_enqueues=asynchronous_enqueues)
         return shared_examples_queue
@@ -172,7 +187,7 @@ class GenomeFlowInterface(object):
         extractor_type = data_type2extractor[data_type]
         options = {}
         data_path = data_specs
-        if extractor_type == 'bed': # parse data specs
+        if extractor_type == 'bed':  # parse data specs
             data_path = data_specs['filepath']
             options = data_type2options[data_type].copy()
             options.update(data_specs['options'])

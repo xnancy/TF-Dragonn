@@ -97,7 +97,7 @@ class ClassifierTrainer(object):
                                        values=[("loss", batch_loss),
                                                ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
 
-                epoch_valid_metrics = self.test(model, valid_queue, test_size=500000)
+                epoch_valid_metrics = self.test(model, valid_queue)
                 valid_metrics.append(epoch_valid_metrics)
                 if verbose:
                     self.logger.info('\nEpoch {}:'.format(epoch))
@@ -148,7 +148,7 @@ class ClassifierTrainer(object):
                 num_examples = min(test_size, iterator.num_examples)
             else:
                 num_examples = iterator.num_examples
-            num_batches = int(np.floor(iterator.num_examples / batch_size))
+            num_batches = int(np.ceil(num_examples / batch_size))
 
             if verbose:
                 progbar = Progbar(target=num_examples)
@@ -157,6 +157,8 @@ class ClassifierTrainer(object):
             labels = []
 
             for batch_indx, batch in enumerate(iterator):
+                if batch_indx == num_batches:
+                    break
                 predictions.append(
                     np.vstack(model.model.predict_on_batch(batch)))
                 labels.append(batch['labels'])
@@ -166,6 +168,7 @@ class ClassifierTrainer(object):
                     if batch_indx % BATCH_FREQ_UPDATE_PROGBAR == 0:
                         progbar.update(batch_indx * batch_size,
                                        values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+
             iterator.close()
             del iterator
 

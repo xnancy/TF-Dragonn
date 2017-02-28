@@ -138,9 +138,7 @@ class GenomeFlowInterface(object):
                                      neg_interval_queue: 1 - pos_sampling_rate}
             interval_queue = gf.io.SharedIntervalQueue(
                 interval_queue_ratios, name='{}-shared-interval-queue'.format(
-                    dataset_id),
-                capacity=50000, shuffle=shuffle, min_after_dequeue=40000,
-                enqueue_batch_size=128)
+                    dataset_id), capacity=50000, enqueue_batch_size=128)
         else:
             # temporary hack to overcome 2Gb limit
             labels = labels[:20000000]

@@ -170,7 +170,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
                                                  lr=0.0003,
                                                  batch_size=BATCH_SIZE,
                                                  epoch_size=EPOCH_SIZE,
-                                                 num_epochs=1,
+                                                 num_epochs=100,
                                                  early_stopping_metric=EARLYSTOPPING_KEY,
                                                  early_stopping_patience=EARLYSTOPPING_PATIENCE,
                                                  logger=trainer_logger)

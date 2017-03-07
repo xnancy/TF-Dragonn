@@ -42,6 +42,21 @@ def model_from_config_and_queue(model_config_file_path, queue):
     return model_class(queue.output_shapes, **config)
 
 
+def model_from_minimal_config(model_config_file_path, shapes, num_tasks):
+    """
+    Uses queue output shapes and json file
+    with architecture params in to initialize a model
+    """
+    thismodule = sys.modules[__name__]
+    with open(model_config_file_path, 'r') as fp:
+        config = json.load(fp)
+    model_class_name = config['model_class']
+
+    model_class = getattr(thismodule, model_class_name)
+    del config['model_class']
+    return model_class(shapes, num_tasks, **config)
+
+
 def reshape_dnase_input(x):
     """
     Reshapes (interval_size) shaped dnase data
@@ -129,7 +144,7 @@ class Classifier(object):
 
 class SequenceClassifier(Classifier):
 
-    def __init__(self, shapes,
+    def __init__(self, shapes, num_tasks,
                  num_filters=(15, 15, 15), conv_width=(15, 15, 15),
                  pool_width=35, dropout=0, batch_norm=False):
         assert len(num_filters) == len(conv_width)
@@ -152,14 +167,14 @@ class SequenceClassifier(Classifier):
         # pool and fully connect
         seq_preds = AveragePooling1D((pool_width))(seq_preds)
         seq_preds = Flatten()(seq_preds)
-        seq_preds = Dense(output_dim=shapes['labels'][-1])(seq_preds)
+        seq_preds = Dense(output_dim=num_tasks)(seq_preds)
         seq_preds = Activation('sigmoid')(seq_preds)
         self.model = Model(input=keras_inputs.values(), output=seq_preds)
 
 
 class SequenceAndDnaseClassifier(Classifier):
 
-    def __init__(self, shapes,
+    def __init__(self, shapes, num_tasks,
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
@@ -220,14 +235,14 @@ class SequenceAndDnaseClassifier(Classifier):
             logits = Activation('relu')(logits)
             if fc_layer_dropout > 0:
                 logits = Dropout(fc_layer_dropout)(logits)
-        logits = Dense(shapes['labels'][-1])(logits)
+        logits = Dense(num_tasks)(logits)
         logits = Activation('sigmoid')(logits)
         self.model = Model(input=keras_inputs.values(), output=logits)
 
 
 class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
 
-    def __init__(self, shapes,
+    def __init__(self, shapes, num_tasks,
                  num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
                  num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
                  num_combined_filters=(55,), combined_conv_width=(25,),
@@ -303,6 +318,6 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
             if final_fc_dropout > 0:
                 logits = Dropout(final_fc_dropout)(logits)
 
-        logits = Dense(shapes['labels'][-1])(logits)
+        logits = Dense(num_tasks)(logits)
         logits = Activation('sigmoid')(logits)
         self.model = Model(input=keras_inputs.values(), output=logits)

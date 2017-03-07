@@ -98,7 +98,10 @@ class GenomeFlowInterface(object):
                           input_names=None, shuffle=False, enqueues_per_thread=[128]):
         intervals = dataset['intervals']
         inputs = dataset['inputs']
-        labels = dataset['labels']
+        if 'labels' in dataset:
+            labels = dataset['labels']
+        else:
+            labels = None
         if shuffle: # shuffle intervals and labels
             chroms = intervals['chrom']
             starts = intervals['start']
@@ -140,9 +143,9 @@ class GenomeFlowInterface(object):
                 interval_queue_ratios, name='{}-shared-interval-queue'.format(
                     dataset_id), capacity=50000, enqueue_batch_size=128)
         else:
-            # temporary hack to overcome 2Gb limit
-            labels = labels[:20000000]
-            intervals = {k: v[:20000000] for k, v in intervals.items()}
+            if intervals['chrom'].shape[0] > 20000000: # temporary hack to overcome 2Gb limit
+                labels = labels[:20000000]
+                intervals = {k: v[:20000000] for k, v in intervals.items()}
 
             interval_queue = gf.io.IntervalQueue(
                 intervals, labels, name='{}-interval-queue'.format(dataset_id),

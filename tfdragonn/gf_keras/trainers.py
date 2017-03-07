@@ -180,3 +180,53 @@ class ClassifierTrainer(object):
         predictions = np.vstack(predictions)
         labels = np.vstack(labels)
         return ClassificationResult(labels, predictions, task_names=self.task_names)
+
+    def predict(self, model, queue, batch_size=1000, verbose=True):
+        iterator = None
+        process = psutil.Process(os.getpid())
+
+        def get_rss_prop():  # this is quite expensive
+            return (process.memory_info().rss - process.memory_info().shared) / 10**6
+        rss_minus_shr_memory = get_rss_prop()
+
+        try:
+            iterator = io_utils.ExampleQueueIterator(
+                queue, num_exs_batch=batch_size, num_epochs=1,
+                allow_smaller_final_batch=True)
+
+            if verbose:
+                progbar = Progbar(target=iterator.num_examples)
+
+            chroms = []
+            starts = []
+            ends = []
+            predictions = []
+
+            for batch_indx, batch in enumerate(iterator):
+                chroms.append(batch['intervals/chrom'])
+                starts.append(batch['intervals/start'])
+                ends.append(batch['intervals/end'])
+                predictions.append(
+                    np.vstack(model.model.predict_on_batch(batch)))
+                
+                if verbose:
+                    if batch_indx % BATCH_FREQ_UPDATE_MEM_USAGE == 0:
+                        rss_minus_shr_memory = get_rss_prop()
+                    if batch_indx % BATCH_FREQ_UPDATE_PROGBAR == 0:
+                        progbar.update(batch_indx * batch_size,
+                                       values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+
+            iterator.close()
+            del iterator
+
+        except Exception as e:
+            if iterator is not None:
+                iterator.close()
+            raise e
+
+        # concatenate intervals and predictions
+        intervals = {'chrom': np.concatenate(chroms),
+                     'start': np.concatenate(starts),
+                     'end': np.concatenate(ends)}
+        predictions = np.vstack(predictions)
+        return intervals, predictions

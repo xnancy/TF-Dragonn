@@ -35,9 +35,9 @@ EARLYSTOPPING_PATIENCE = 4
 IN_MEMORY = False
 # BATCH_SIZE = 128
 BATCH_SIZE = 256
-# EPOCH_SIZE = 250000
+EPOCH_SIZE = 250000
 # EPOCH_SIZE = 2500000 
-EPOCH_SIZE = 5000000
+# EPOCH_SIZE = 5000000
 
 # TF Session Settings
 DEFER_DELETE_SIZE = int(250 * 1e6)  # 250MB
@@ -64,6 +64,8 @@ def parse_args():
                         help='Log directory, also used as globally unique run identifier')
     train_parser.add_argument('--visiblegpus', type=str,
                         required=True, help='Visible GPUs string')
+    train_parser.add_argument('--kfold-cv', action='store_true', default=False,
+                              help='Performs K-fold CV with heldout celltypes')
 
     test_parser = subparsers.add_parser('test', help="main testing script")
     test_parser.add_argument('logdir', type=os.path.abspath,
@@ -93,7 +95,7 @@ def parse_args():
     return command, args
 
 
-def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
+def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, kfold_cv=False):
 
     datasetspec = os.path.abspath(datasetspec)
     assert(os.path.isfile(datasetspec))
@@ -134,35 +136,90 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus):
     session = tf.Session(config=session_config)
     K.set_session(session)
 
-    logger.info('Setting up genomeflow queues')
+    logger.info("Setting up a genomeflow interface")
     data_interface = genomeflow_interface.GenomeFlowInterface(
         datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
-    train_queue = data_interface.get_train_queue()
-    validation_queue = data_interface.get_validation_queue()
 
-    logger.info('initializing  model and trainer')
-    # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
-    # with jit_scope():
-    model = models.model_from_config_and_queue(modelspec, train_queue)
-    loggers.setup_logger('trainer', os.path.join(logdir, "metrics.log"))
-    trainer_logger = logging.getLogger('trainer')
-    trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
-                                         optimizer='adam',
-                                         lr=0.0003,
-                                         batch_size=BATCH_SIZE,
-                                         epoch_size=EPOCH_SIZE,
-                                         num_epochs=100,
-                                         early_stopping_metric=EARLYSTOPPING_KEY,
-                                         early_stopping_patience=EARLYSTOPPING_PATIENCE,
-                                         logger=trainer_logger)
-    logger.info('training model')
-    trainer.train(model, train_queue, validation_queue,
-                  save_best_model_to_prefix=os.path.join(logdir, "model"))
+    if kfold_cv and len(data_interface.training_dataset) > 1:
+        logger.info("Setting up K-fold CV with a heldout celltype")
+        train_example_queues = {dataset_id: data_interface.get_example_queue(dataset_values, dataset_id,
+                                                                             input_names=data_interface.input_names)
+                                for dataset_id, dataset_values in data_interface.training_dataset.items()}
+        valid_example_queues = {dataset_id: data_interface.get_example_queue(dataset_values, dataset_id,
+                                                                             num_epochs=1,
+                                                                             input_names=data_interface.input_names,
+                                                                             enqueues_per_thread=[128, 1])
+                                for dataset_id, dataset_values in data_interface.validation_dataset.items()}
+        # train a model for each held out dataset
+        for valid_dataset_id, valid_example_queue in valid_example_queues.items():
+            logger.info("Using dataset {} for heldout validation".format(valid_dataset_id))
+            fold_logdir = os.path.join(os.path.abspath(logdir), valid_dataset_id)
+            if os.path.isdir(fold_logdir):  # remove empty directories for debugging
+                if len(os.listdir(fold_logdir)) == 0:
+                    shutil.rmtree(fold_logdir)
+            assert(not os.path.exists(fold_logdir))
+            assert(fold_logdir.startswith(LOGDIR_PREFIX))
+            os.makedirs(fold_logdir)
+            logger.info('Fold logdir path: {}'.format(fold_logdir))
 
-    # copy datasetspec, intervalspec, and models params to log dir
-    shutil.copyfile(datasetspec, os.path.join(logdir, ntpath.basename('datasetspec.json')))
-    shutil.copyfile(intervalspec, os.path.join(logdir, ntpath.basename('intervalspec.json')))
-    shutil.copyfile(modelspec, os.path.join(logdir, ntpath.basename('modelspec.json')))
+            logger.info('initializing trainer')
+            loggers.setup_logger('{}-trainer'.format(valid_dataset_id), os.path.join(fold_logdir, "metrics.log"))
+            trainer_logger = logging.getLogger('{}-trainer'.format(valid_dataset_id))
+            trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
+                                                 optimizer='adam',
+                                                 lr=0.0003,
+                                                 batch_size=BATCH_SIZE,
+                                                 epoch_size=EPOCH_SIZE,
+                                                 num_epochs=1,
+                                                 early_stopping_metric=EARLYSTOPPING_KEY,
+                                                 early_stopping_patience=EARLYSTOPPING_PATIENCE,
+                                                 logger=trainer_logger)
+            logger.info('Setting up genomeflow queues for this fold')
+            train_example_queues_fold = {dataset_id: example_queue
+                                         for dataset_id, example_queue in train_example_queues.items()
+                                         if dataset_id != valid_dataset_id}
+            train_queue = data_interface.get_shared_examples_queue(
+                train_example_queues_fold, asynchronous_enqueues=True, enqueues_per_thread=[128])
+            logger.info('initializing  model and trainer')
+            model = models.model_from_minimal_config(
+                modelspec,valid_example_queue.output_shapes, len(data_interface.task_names))
+            logger.info('training model')
+            trainer.train(model, train_queue, valid_example_queue,
+                          save_best_model_to_prefix=os.path.join(fold_logdir, "model"))
+
+            # copy datasetspec, intervalspec, and models params to log dir
+            shutil.copyfile(datasetspec, os.path.join(fold_logdir, ntpath.basename('datasetspec.json')))
+            shutil.copyfile(intervalspec, os.path.join(fold_logdir, ntpath.basename('intervalspec.json')))
+            shutil.copyfile(modelspec, os.path.join(fold_logdir, ntpath.basename('modelspec.json')))
+
+    else:
+        logger.info('Setting up genomeflow queues')
+        train_queue = data_interface.get_train_queue()
+        validation_queue = data_interface.get_validation_queue()
+
+        logger.info('initializing  model and trainer')
+        # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
+        # with jit_scope():
+        model = models.model_from_config_and_queue(modelspec, train_queue)
+        loggers.setup_logger('trainer', os.path.join(logdir, "metrics.log"))
+        trainer_logger = logging.getLogger('trainer')
+        trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
+                                             optimizer='adam',
+                                             lr=0.0003,
+                                             batch_size=BATCH_SIZE,
+                                             epoch_size=EPOCH_SIZE,
+                                             num_epochs=100,
+                                             early_stopping_metric=EARLYSTOPPING_KEY,
+                                             early_stopping_patience=EARLYSTOPPING_PATIENCE,
+                                             logger=trainer_logger)
+        logger.info('training model')
+        trainer.train(model, train_queue, validation_queue,
+                      save_best_model_to_prefix=os.path.join(logdir, "model"))
+
+        # copy datasetspec, intervalspec, and models params to log dir
+        shutil.copyfile(datasetspec, os.path.join(logdir, ntpath.basename('datasetspec.json')))
+        shutil.copyfile(intervalspec, os.path.join(logdir, ntpath.basename('intervalspec.json')))
+        shutil.copyfile(modelspec, os.path.join(logdir, ntpath.basename('modelspec.json')))
 
 
 def test_tf_dragonn(logdir, visiblegpus, test_size=None):

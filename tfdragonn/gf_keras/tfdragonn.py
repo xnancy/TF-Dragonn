@@ -35,8 +35,8 @@ EARLYSTOPPING_PATIENCE = 4
 IN_MEMORY = False
 # BATCH_SIZE = 128
 BATCH_SIZE = 256
-EPOCH_SIZE = 250000
-# EPOCH_SIZE = 2500000 
+# EPOCH_SIZE = 250000
+EPOCH_SIZE = 2500000 
 # EPOCH_SIZE = 5000000
 
 # TF Session Settings
@@ -140,9 +140,14 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
     data_interface = genomeflow_interface.GenomeFlowInterface(
         datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
 
+    logger.info("shuffle: {}".format(data_interface.shuffle))
+    logger.info("pos_sampling_rate: {}".format(data_interface.pos_sampling_rate))
+
     if kfold_cv and len(data_interface.training_dataset) > 1:
         logger.info("Setting up K-fold CV with a heldout celltype")
         train_example_queues = {dataset_id: data_interface.get_example_queue(dataset_values, dataset_id,
+                                                                             pos_sampling_rate=data_interface.pos_sampling_rate,
+                                                                             shuffle=data_interface.shuffle,
                                                                              input_names=data_interface.input_names)
                                 for dataset_id, dataset_values in data_interface.training_dataset.items()}
         valid_example_queues = {dataset_id: data_interface.get_example_queue(dataset_values, dataset_id,
@@ -182,7 +187,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
                 train_example_queues_fold, asynchronous_enqueues=True, enqueues_per_thread=[128])
             logger.info('initializing  model and trainer')
             model = models.model_from_minimal_config(
-                modelspec,valid_example_queue.output_shapes, len(data_interface.task_names))
+                modelspec, valid_example_queue.output_shapes, len(data_interface.task_names))
             logger.info('training model')
             trainer.train(model, train_queue, valid_example_queue,
                           save_best_model_to_prefix=os.path.join(fold_logdir, "model"))
@@ -200,7 +205,8 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
         logger.info('initializing  model and trainer')
         # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
         # with jit_scope():
-        model = models.model_from_config_and_queue(modelspec, train_queue)
+        model = models.model_from_minimal_config(
+                modelspec, train_queue.output_shapes, len(data_interface.task_names))
         loggers.setup_logger('trainer', os.path.join(logdir, "metrics.log"))
         trainer_logger = logging.getLogger('trainer')
         trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,

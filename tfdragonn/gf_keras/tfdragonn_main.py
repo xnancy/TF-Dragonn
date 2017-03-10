@@ -5,6 +5,8 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
+import collections
+import json
 import os
 import logging
 import ntpath
@@ -16,11 +18,14 @@ import shutil
 from keras import backend as K
 import tensorflow as tf
 
+from tfdragonn.datasets import parse_raw_intervals_config_file ## TODO: reimplement
 import database
 import genomeflow_interface
 import models
 import trainers
 import loggers
+from intervals import get_tf_predictive_setup
+
 
 DIR_PREFIX = '/srv/scratch/tfbinding/'
 LOGDIR_PREFIX = '/srv/scratch/tfbinding/tf_logs/'
@@ -88,6 +93,24 @@ def parse_args():
                         required=True, help='Visible GPUs string')
     predict_parser.add_argument('--flank-size', type=int, default=400,
                                 help='Trims input intervals by this size. Default: 400.')
+
+    label_regions_parser = subparsers.add_parser('label_regions', formatter_class=argparse.RawTextHelpFormatter,
+                                                 help='Generates fixed length regions and their labels for each dataset.'
+                                                 'Writes an intervalspec file.')
+    label_regions_parser.add_argument('raw_intervals_config_file', type=str,
+                                      help='includes task names and map from dataset ids to raw interval files')
+    label_regions_parser.add_argument('prefix', type=str, help='prefix to output files')
+    label_regions_parser.add_argument('--n-jobs', type=int, default=1,
+                                      help='num of processes.\nDefault: 1.')
+    label_regions_parser.add_argument('--bin-size', type=int, default=200,
+                                       help='size of bins for labeling.\nDefault: 200.')
+    label_regions_parser.add_argument('--flank-size', type=int, default=400,
+                                       help='size of flanks around labeled bins.\nDefault: 400.')
+    label_regions_parser.add_argument('--stride', type=int, default=50,
+                                       help='spacing between consecutive bins.\nDefault: 50.')
+    label_regions_parser.add_argument('--genome', type=str, default='hg19',
+                                       help='Genome name.\nDefault: hg19.'
+                                      '\nOptions: hg18, hg38, mm9, mm10, dm3, dm6.')
 
     args = vars(parser.parse_args())
     command = args.pop("command", None)
@@ -201,6 +224,9 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
         logger.info('Setting up genomeflow queues')
         train_queue = data_interface.get_train_queue()
         validation_queue = data_interface.get_validation_queue()
+        normalized_pos_rate = train_queue.normalized_pos_rate
+        class_weights = {0: 1,
+                         1: 1 / normalized_pos_rate}
 
         logger.info('initializing  model and trainer')
         # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
@@ -339,14 +365,48 @@ def predict_tf_dragonn(datasetspec, intervalspec, logdir, visiblegpus, flank_siz
                 task_name, dataset_id, output_fname))
     logger.info('Done!')
 
+def main_label_regions(raw_intervals_config_file, prefix,
+                       n_jobs=1, bin_size=200, flank_size=400, stride=50, genome='hg19'):
+    """
+    Generates regions and labels files for each dataset.
+    Writes new data config file with the generated files.
+    """
+    raw_intervals_config = parse_raw_intervals_config_file(raw_intervals_config_file)
+    processed_intervals_dict = collections.OrderedDict([("task_names", raw_intervals_config.task_names)])
+    logger.info("Generating regions and labels for datasets in {}...".format(raw_intervals_config_file))
+    for dataset_id, raw_intervals in raw_intervals_config:
+        logger.info("Generating regions and labels for dataset {}...".format(dataset_id))
+        path_to_dataset_intervals_labels = os.path.abspath("{}.{}.intervals_labels.tsv.gz".format(prefix, dataset_id))
+        if os.path.isfile(path_to_dataset_intervals_labels):
+            logger.info("intervals_labels file {} already exists. skipping dataset {}!".format(
+                path_to_dataset_intervals_labels, dataset_id))
+        else:
+            intervals, labels = get_tf_predictive_setup(raw_intervals.feature_beds, region_bedtool=raw_intervals.region_bed,
+                                                      ambiguous_feature_bedtools=raw_intervals.ambiguous_feature_beds,
+                                                      bin_size=bin_size, flank_size=flank_size, stride=stride,
+                                                      filter_flank_overlaps=False, genome=genome, n_jobs=n_jobs)
+            intervals_labels_array = np.empty((labels.shape[0], 3 + labels.shape[1]), np.dtype((str, 10)))
+            intervals_labels_array[:, :3] = intervals.to_dataframe().as_matrix()[:, :3]
+            intervals_labels_array[:, 3:] = labels
+            #np.save(path_to_dataset_intervals_labels, intervals_labels_array)
+            np.savetxt(path_to_dataset_intervals_labels, intervals_labels_array, delimiter='\t', fmt='%s')
+            logger.info("Saved intervals_labels file to {}".format(path_to_dataset_intervals_labels))
+        processed_intervals_dict[dataset_id] = {"intervals_labels": path_to_dataset_intervals_labels}
+    # write processed intervals config file
+    processed_intervals_config_file = os.path.abspath("{}.json".format(prefix))
+    json.dump(processed_intervals_dict, open(processed_intervals_config_file, "w"), indent=4)
+    logger.info("Wrote new data config file to {}.".format(processed_intervals_config_file))
+    logger.info("Done!")
 
 def main():
     command_functions = {'train': train_tf_dragonn,
                          'test': test_tf_dragonn,
-                         'predict': predict_tf_dragonn}
+                         'predict': predict_tf_dragonn,
+                         'label_regions': main_label_regions}
     command, args = parse_args()
     command_functions[command](**args)
 
 
 if __name__ == '__main__':
     main()
+

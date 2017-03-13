@@ -12,6 +12,11 @@ import models
 data_type2extractor = {
     'genome_data_dir': 'bcolz_array',
     'dnase_data_dir': 'bcolz_array',
+    'HelT_data_dir': 'bcolz_array',
+    'MGW_data_dir': 'bcolz_array',
+    'OC2_data_dir': 'bcolz_array',
+    'ProT_data_dir': 'bcolz_array',
+    'Roll_data_dir': 'bcolz_array',
     'tss_counts': 'bed',
     'dhs_counts': 'bed',
     'tss_mean_tpm': 'bed',
@@ -188,3 +193,26 @@ class GenomeFlowInterface(object):
             options = data_type2options[data_type].copy()
             options.update(data_specs['options'])
         return gf.io.DataSource(data_path, extractor_type, options)
+
+    @property
+    def normalized_class_rates(self):
+        """sampling rate / true rate"""
+        if len(self.task_names) > 1:
+            return None
+        if self.pos_sampling_rate is None:
+            return 1
+
+        total = num_positives = 0
+        for dataset_id, dataset in self.training_dataset.items():
+            labels = dataset['labels']
+            num_positives += np.sum(labels == 1)
+            total += labels.shape[0]
+
+        pos_rate = num_positives / total
+        neg_rate = 1 - pos_rate
+        
+        normalized_pos_rate = pos_rate / self.pos_sampling_rate
+        normalized_neg_rate = neg_rate / self.pos_sampling_rate
+
+        return {'positive': normalized_pos_rate,
+                'negative': normalized_neg_rate}

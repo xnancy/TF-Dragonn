@@ -43,6 +43,8 @@ BATCH_SIZE = 256
 # EPOCH_SIZE = 250000
 EPOCH_SIZE = 2500000 
 # EPOCH_SIZE = 5000000
+LEARNING_RATE=0.0003
+#LEARNING_RATE=0.00003
 
 # TF Session Settings
 DEFER_DELETE_SIZE = int(250 * 1e6)  # 250MB
@@ -195,7 +197,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
             trainer_logger = logging.getLogger('{}-trainer'.format(valid_dataset_id))
             trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
                                                  optimizer='adam',
-                                                 lr=0.0003,
+                                                 lr=LEARNING_RATE,
                                                  batch_size=BATCH_SIZE,
                                                  epoch_size=EPOCH_SIZE,
                                                  num_epochs=100,
@@ -224,9 +226,9 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
         logger.info('Setting up genomeflow queues')
         train_queue = data_interface.get_train_queue()
         validation_queue = data_interface.get_validation_queue()
-        normalized_pos_rate = train_queue.normalized_pos_rate
-        class_weights = {0: 1,
-                         1: 1 / normalized_pos_rate}
+        #normalized_pos_rate = train_queue.normalized_pos_rate ## TODO (johnny): finish this
+        #class_weights = {0: 1,
+        #                 1: 1 / normalized_pos_rate}
 
         logger.info('initializing  model and trainer')
         # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
@@ -237,7 +239,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
         trainer_logger = logging.getLogger('trainer')
         trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
                                              optimizer='adam',
-                                             lr=0.0003,
+                                             lr=LEARNING_RATE,
                                              batch_size=BATCH_SIZE,
                                              epoch_size=EPOCH_SIZE,
                                              num_epochs=100,

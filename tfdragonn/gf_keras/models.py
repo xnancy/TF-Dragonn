@@ -10,7 +10,8 @@ from keras import backend as K
 from keras.layers import (
     Activation, AveragePooling1D, BatchNormalization,
     Convolution1D, Dense, Dropout, Flatten, Input,
-    MaxPooling1D, Merge, Permute, Reshape
+    MaxPooling1D, Merge, Permute, Reshape,
+    PReLU
 )
 from keras.models import Model
 
@@ -57,7 +58,7 @@ def model_from_minimal_config(model_config_file_path, shapes, num_tasks):
     return model_class(shapes, num_tasks, **config)
 
 
-def reshape_dnase_input(x):
+def reshape_bigwig_input(x):
     """
     Reshapes (interval_size) shaped dnase data
     from example queues into (interval_size, 1)
@@ -69,7 +70,12 @@ def reshape_dnase_input(x):
 _input_reshape_func = {
     # conv1d expects (interval_size, 4)
     "data/genome_data_dir": Permute((2, 1)),
-    "data/dnase_data_dir": reshape_dnase_input
+    "data/HelT_data_dir": reshape_bigwig_input,
+    "data/MGW_data_dir": reshape_bigwig_input,
+    "data/OC2_data_dir": reshape_bigwig_input,
+    "data/ProT_data_dir": reshape_bigwig_input,
+    "data/Roll_data_dir": reshape_bigwig_input,
+    "data/dnase_data_dir": reshape_bigwig_input
 }
 
 
@@ -79,6 +85,13 @@ model_inputs = {
     "SequenceAndDnaseClassifier": [
         "data/genome_data_dir",
         "data/dnase_data_dir"],
+    "ShapeAndDnaseClassifier": [
+        "data/HelT_data_dir",
+        "data/MGW_data_dir",
+        "data/OC2_data_dir",
+        "data/ProT_data_dir",
+        "data/Roll_data_dir",
+        "data/dnase_data_dir"],
     "SequenceDnaseTssDhsCountAndTssExpressionClassifier": [
         "data/genome_data_dir",
         "data/dnase_data_dir",
@@ -86,6 +99,7 @@ model_inputs = {
         "data/tss_counts",
         "data/tss_mean_tpm",
         "data/tss_max_tpm"]
+    
 }
 
 
@@ -233,6 +247,85 @@ class SequenceAndDnaseClassifier(Classifier):
             if batch_norm:
                 logits = BatchNormalization()(logits)
             logits = Activation('relu')(logits)
+            if fc_layer_dropout > 0:
+                logits = Dropout(fc_layer_dropout)(logits)
+        logits = Dense(num_tasks)(logits)
+        logits = Activation('sigmoid')(logits)
+        self.model = Model(input=keras_inputs.values(), output=logits)
+
+
+class ShapeAndDnaseClassifier(Classifier):
+
+    def __init__(self, shapes, num_tasks,
+                 num_shape_filters=(25, 25, 25), shape_conv_width=(25, 25, 25),
+                 num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
+                 num_combined_filters=(55,), combined_conv_width=(25,),
+                 pool_width=25,
+                 fc_layer_widths=(100,),
+                 shape_conv_dropout=0.0,
+                 dnase_conv_dropout=0.0,
+                 combined_conv_dropout=0.0,
+                 fc_layer_dropout=0.0,
+                 shape_features_sigmoid=False,
+                 batch_norm=False):
+        assert len(num_shape_filters) == len(shape_conv_width)
+        assert len(num_dnase_filters) == len(dnase_conv_width)
+        assert len(num_combined_filters) == len(combined_conv_width)
+
+        # configure inputs
+        keras_inputs = self.get_keras_inputs(shapes)
+        inputs = self.reshape_keras_inputs(keras_inputs)
+
+        # convolve sequence
+        shape_preds = Merge(mode='concat', concat_axis=-1)([
+            inputs[k] for k in ["data/HelT_data_dir", "data/MGW_data_dir",
+                                "data/OC2_data_dir", "data/ProT_data_dir",
+                                "data/Roll_data_dir"]])
+        for i, (nb_filter, nb_col) in enumerate(zip(num_shape_filters, shape_conv_width)):
+            shape_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(shape_preds)
+            if batch_norm:
+                shape_preds = BatchNormalization()(shape_preds)
+            if i + 1 == len(num_shape_filters) and shape_features_sigmoid: # sigmoid before stacking with dnase
+                shape_preds = Activation('sigmoid')(shape_preds)
+            else:
+                #shape_preds = Activation('relu')(shape_preds)
+                shape_preds = PReLU()(shape_preds)
+            if shape_conv_dropout > 0:
+                shape_preds = Dropout(shape_conv_dropout)(shape_preds)
+
+        # convolve dnase
+        dnase_preds = inputs["data/dnase_data_dir"]
+        for nb_filter, nb_col in zip(num_dnase_filters, dnase_conv_width):
+            dnase_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(dnase_preds)
+            if batch_norm:
+                dnase_preds = BatchNormalization()(dnase_preds)
+            #dnase_preds = Activation('relu')(dnase_preds)
+            dnase_preds = PReLU()(dnase_preds)
+            if dnase_conv_dropout > 0:
+                dnase_preds = Dropout(dnase_conv_dropout)(dnase_preds)
+
+        # stack and convolve
+        logits = Merge(mode='concat', concat_axis=-1)([shape_preds, dnase_preds])
+        for nb_filter, nb_col in zip(num_combined_filters, combined_conv_width):
+            logits = Convolution1D(nb_filter, nb_col, 'he_normal')(logits)
+            if batch_norm:
+                logits = BatchNormalization()(logits)
+            #logits = Activation('relu')(logits)
+            logits = PReLU()(logits)
+            if combined_conv_dropout > 0:
+                logits = Dropout(combined_conv_dropout)(logits)
+
+        # pool and fully connect
+        logits = AveragePooling1D((pool_width))(logits)
+        logits = Flatten()(logits)
+        for fc_layer_width in fc_layer_widths:
+            logits = Dense(fc_layer_width)(logits)
+            if batch_norm:
+                logits = BatchNormalization()(logits)
+            #logits = Activation('relu')(logits)
+            logits = PReLU()(logits)
             if fc_layer_dropout > 0:
                 logits = Dropout(fc_layer_dropout)(logits)
         logits = Dense(num_tasks)(logits)

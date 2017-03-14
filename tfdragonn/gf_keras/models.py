@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import collections
 import json
+import numpy as np
 import sys
 
 from keras import backend as K
@@ -15,6 +16,7 @@ from keras.layers import (
 )
 from keras.models import Model
 
+import pwms
 
 def model_from_config(model_config_file_path):
     """Load a model from a json config file."""
@@ -81,6 +83,8 @@ _input_reshape_func = {
 
 model_inputs = {
     "SequenceClassifier": [
+        "data/genome_data_dir"],
+    "SequenceBaselineClassifier": [
         "data/genome_data_dir"],
     "SequenceAndDnaseClassifier": [
         "data/genome_data_dir",
@@ -170,6 +174,52 @@ class SequenceClassifier(Classifier):
         # convolve sequence
         seq_preds = inputs["data/genome_data_dir"]
         for i, (nb_filter, nb_col) in enumerate(zip(num_filters, conv_width)):
+            seq_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(seq_preds)
+            if batch_norm:
+                seq_preds = BatchNormalization()(seq_preds)
+            seq_preds = Activation('relu')(seq_preds)
+            if dropout > 0:
+                seq_preds = Dropout(dropout)(seq_preds)
+
+        # pool and fully connect
+        seq_preds = AveragePooling1D((pool_width))(seq_preds)
+        seq_preds = Flatten()(seq_preds)
+        seq_preds = Dense(output_dim=num_tasks)(seq_preds)
+        seq_preds = Activation('sigmoid')(seq_preds)
+        self.model = Model(input=keras_inputs.values(), output=seq_preds)
+
+
+class SequenceBaselineClassifier(Classifier):
+
+    def __init__(self, shapes, num_tasks, pwm_paths,
+                 num_filters=(15, 15, 15), conv_width=(15, 15, 15),
+                 pool_width=35, dropout=0, batch_norm=False):
+        assert len(num_filters) == len(conv_width)
+
+        # configure inputs
+        keras_inputs = self.get_keras_inputs(shapes)
+        inputs = self.reshape_keras_inputs(keras_inputs)
+
+        # configure initialization weights
+        conv_weights = pwms.pwms2conv_weights(pwm_paths) ## (nb_filter, filter_length, input_dim)
+        conv_weights = np.rollaxis(conv_weights, 0, 3) ## (filter_length, input_dim, nb_filter)
+        conv_weights = np.expand_dims(conv_weights, 1) ## (filter_length, 1, input_dim, nb_filter)
+        conv_biases = np.zeros((conv_weights.shape[3]))
+        weights = [conv_weights, conv_biases]
+
+        # convolve sequence with fixed known pwms
+        seq_preds = inputs["data/genome_data_dir"]
+        seq_preds = Convolution1D(
+            conv_weights.shape[3], conv_weights.shape[0],
+            weights=weights, trainable=False)(seq_preds)
+        seq_preds = BatchNormalization()(seq_preds) ## this is necessary
+        seq_preds = Activation('relu')(seq_preds)
+        if dropout > 0:
+            seq_preds = Dropout(dropout)(seq_preds)
+
+        # de novo convolutions
+        for nb_filter, nb_col in zip(num_filters, conv_width):
             seq_preds = Convolution1D(
                 nb_filter, nb_col, 'he_normal')(seq_preds)
             if batch_norm:

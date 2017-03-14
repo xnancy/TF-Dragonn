@@ -316,7 +316,6 @@ class ShapeAndDnaseClassifier(Classifier):
                  dnase_conv_dropout=0.0,
                  combined_conv_dropout=0.0,
                  fc_layer_dropout=0.0,
-                 shape_features_sigmoid=False,
                  batch_norm=False):
         assert len(num_shape_filters) == len(shape_conv_width)
         assert len(num_dnase_filters) == len(dnase_conv_width)
@@ -336,11 +335,7 @@ class ShapeAndDnaseClassifier(Classifier):
                 nb_filter, nb_col, 'he_normal')(shape_preds)
             if batch_norm:
                 shape_preds = BatchNormalization()(shape_preds)
-            if i + 1 == len(num_shape_filters) and shape_features_sigmoid: # sigmoid before stacking with dnase
-                shape_preds = Activation('sigmoid')(shape_preds)
-            else:
-                #shape_preds = Activation('relu')(shape_preds)
-                shape_preds = PReLU()(shape_preds)
+            shape_preds = Activation('relu')(shape_preds)
             if shape_conv_dropout > 0:
                 shape_preds = Dropout(shape_conv_dropout)(shape_preds)
 
@@ -351,8 +346,7 @@ class ShapeAndDnaseClassifier(Classifier):
                 nb_filter, nb_col, 'he_normal')(dnase_preds)
             if batch_norm:
                 dnase_preds = BatchNormalization()(dnase_preds)
-            #dnase_preds = Activation('relu')(dnase_preds)
-            dnase_preds = PReLU()(dnase_preds)
+            dnase_preds = Activation('relu')(dnase_preds)
             if dnase_conv_dropout > 0:
                 dnase_preds = Dropout(dnase_conv_dropout)(dnase_preds)
 
@@ -362,8 +356,7 @@ class ShapeAndDnaseClassifier(Classifier):
             logits = Convolution1D(nb_filter, nb_col, 'he_normal')(logits)
             if batch_norm:
                 logits = BatchNormalization()(logits)
-            #logits = Activation('relu')(logits)
-            logits = PReLU()(logits)
+            logits = Activation('relu')(logits)
             if combined_conv_dropout > 0:
                 logits = Dropout(combined_conv_dropout)(logits)
 
@@ -374,8 +367,7 @@ class ShapeAndDnaseClassifier(Classifier):
             logits = Dense(fc_layer_width)(logits)
             if batch_norm:
                 logits = BatchNormalization()(logits)
-            #logits = Activation('relu')(logits)
-            logits = PReLU()(logits)
+            logits = Activation('relu')(logits)
             if fc_layer_dropout > 0:
                 logits = Dropout(fc_layer_dropout)(logits)
         logits = Dense(num_tasks)(logits)

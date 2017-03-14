@@ -25,7 +25,9 @@ raw_input2processed_input = {'genome_fasta': 'genome_data_dir',
 
 PROCESSED_INPUT_NAMES = set(['genome_data_dir', 'dnase_data_dir',
                              'tss_counts', 'dhs_counts',
-                             'tss_mean_tpm', 'tss_max_tpm'])
+                             'tss_mean_tpm', 'tss_max_tpm',
+                             'HelT_data_dir', 'MGW_data_dir', 'OC2_data_dir',
+                             'ProT_data_dir', 'Roll_data_dir'])
 
 
 def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):

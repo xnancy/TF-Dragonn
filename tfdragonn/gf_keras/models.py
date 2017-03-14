@@ -89,6 +89,9 @@ model_inputs = {
     "SequenceAndDnaseClassifier": [
         "data/genome_data_dir",
         "data/dnase_data_dir"],
+    "SequenceAndDnaseBaselineClassifier": [
+        "data/genome_data_dir",
+        "data/dnase_data_dir"],
     "ShapeAndDnaseClassifier": [
         "data/HelT_data_dir",
         "data/MGW_data_dir",
@@ -258,6 +261,91 @@ class SequenceAndDnaseClassifier(Classifier):
         inputs = self.reshape_keras_inputs(keras_inputs)
 
         # convolve sequence
+        seq_preds = inputs["data/genome_data_dir"]
+        for nb_filter, nb_col in zip(num_seq_filters, seq_conv_width):
+            seq_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(seq_preds)
+            if batch_norm:
+                seq_preds = BatchNormalization()(seq_preds)
+            seq_preds = Activation('relu')(seq_preds)
+            if seq_conv_dropout > 0:
+                seq_preds = Dropout(seq_conv_dropout)(seq_preds)
+
+        # convolve dnase
+        dnase_preds = inputs["data/dnase_data_dir"]
+        for nb_filter, nb_col in zip(num_dnase_filters, dnase_conv_width):
+            dnase_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(dnase_preds)
+            if batch_norm:
+                dnase_preds = BatchNormalization()(dnase_preds)
+            dnase_preds = Activation('relu')(dnase_preds)
+            if dnase_conv_dropout > 0:
+                dnase_preds = Dropout(dnase_conv_dropout)(dnase_preds)
+
+        # stack and convolve
+        logits = Merge(mode='concat', concat_axis=-1)([seq_preds, dnase_preds])
+        for nb_filter, nb_col in zip(num_combined_filters, combined_conv_width):
+            logits = Convolution1D(nb_filter, nb_col, 'he_normal')(logits)
+            if batch_norm:
+                logits = BatchNormalization()(logits)
+            logits = Activation('relu')(logits)
+            if combined_conv_dropout > 0:
+                logits = Dropout(combined_conv_dropout)(logits)
+
+        # pool and fully connect
+        logits = AveragePooling1D((pool_width))(logits)
+        logits = Flatten()(logits)
+        for fc_layer_width in fc_layer_widths:
+            logits = Dense(fc_layer_width)(logits)
+            if batch_norm:
+                logits = BatchNormalization()(logits)
+            logits = Activation('relu')(logits)
+            if fc_layer_dropout > 0:
+                logits = Dropout(fc_layer_dropout)(logits)
+        logits = Dense(num_tasks)(logits)
+        logits = Activation('sigmoid')(logits)
+        self.model = Model(input=keras_inputs.values(), output=logits)
+
+
+class SequenceAndDnaseBaselineClassifier(Classifier):
+
+    def __init__(self, shapes, num_tasks, pwm_paths,
+                 num_seq_filters=(25, 25, 25), seq_conv_width=(25, 25, 25),
+                 num_dnase_filters=(25, 25, 25), dnase_conv_width=(25, 25, 25),
+                 num_combined_filters=(55,), combined_conv_width=(25,),
+                 pool_width=25,
+                 fc_layer_widths=(100,),
+                 seq_conv_dropout=0.0,
+                 dnase_conv_dropout=0.0,
+                 combined_conv_dropout=0.0,
+                 fc_layer_dropout=0.0,
+                 batch_norm=False):
+        assert len(num_seq_filters) == len(seq_conv_width)
+        assert len(num_dnase_filters) == len(dnase_conv_width)
+        assert len(num_combined_filters) == len(combined_conv_width)
+
+        # configure inputs
+        keras_inputs = self.get_keras_inputs(shapes)
+        inputs = self.reshape_keras_inputs(keras_inputs)
+
+        # configure initialization weights
+        conv_weights = pwms.pwms2conv_weights(pwm_paths) ## (nb_filter, filter_length, input_dim)
+        conv_weights = np.rollaxis(conv_weights, 0, 3) ## (filter_length, input_dim, nb_filter)
+        conv_weights = np.expand_dims(conv_weights, 1) ## (filter_length, 1, input_dim, nb_filter)
+        conv_biases = np.zeros((conv_weights.shape[3]))
+        weights = [conv_weights, conv_biases]
+
+        # convolve sequence with fixed known pwms
+        seq_preds = inputs["data/genome_data_dir"]
+        seq_preds = Convolution1D(
+            conv_weights.shape[3], conv_weights.shape[0],
+            weights=weights, trainable=False)(seq_preds)
+        seq_preds = BatchNormalization()(seq_preds) ## this is necessary
+        seq_preds = Activation('relu')(seq_preds)
+        if seq_conv_dropout > 0:
+            seq_preds = Dropout(dropout)(seq_preds)
+
+        # convolve with de novo convolutions
         seq_preds = inputs["data/genome_data_dir"]
         for nb_filter, nb_col in zip(num_seq_filters, seq_conv_width):
             seq_preds = Convolution1D(

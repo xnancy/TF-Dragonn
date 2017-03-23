@@ -8,6 +8,7 @@ import genomeflow as gf
 import datasets
 import models
 
+
 data_type2extractor = {
     'genome_data_dir': 'bcolz_array',
     'dnase_data_dir': 'bcolz_array',
@@ -42,7 +43,8 @@ data_type2options = {
 class GenomeFlowInterface(object):
 
     def __init__(self, datasetspec, intervalspec, modelspec,
-                 shuffle=True, pos_sampling_rate=0.05):
+                 shuffle=True, pos_sampling_rate=0.05,
+                 validation_chroms=None, holdout_chroms=None):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
         self.modelspec = modelspec
@@ -51,22 +53,38 @@ class GenomeFlowInterface(object):
                             for input_name in input_names]
         self.shuffle = shuffle
         self.pos_sampling_rate = pos_sampling_rate
-        self.dataset = datasets.parse_inputs_and_intervals(datasetspec, intervalspec)
+        self.validation_chroms = validation_chroms
+        self.holdout_chroms = holdout_chroms
+        self.dataset = datasets.parse_inputs_and_intervals(
+            datasetspec, intervalspec)
         self.task_names = self.dataset.values()[0]['task_names']
 
     def get_train_queue(self):
+        skip_chroms = []
+        if self.validation_chroms is not None:
+            skip_chroms += self.validation_chroms
+        if self.holdout_chroms is not None:
+            skip_chroms += self.holdout_chroms
         return self.get_queue(self.dataset,
+                              holdout_chroms=skip_chroms,
                               pos_sampling_rate=self.pos_sampling_rate,
                               input_names=self.input_names,
                               shuffle=self.shuffle)
 
     def get_validation_queue(self, num_epochs=1, asynchronous_enqueues=False,
                              enqueues_per_thread=[128, 1]):
+        selected_chroms = self.validation_chroms
         return self.get_queue(
-            self.dataset, num_epochs, asynchronous_enqueues,
-            input_names=self.input_names, enqueues_per_thread=enqueues_per_thread)
+            self.dataset,
+            selected_chroms=selected_chroms,
+            holdout_chroms=self.holdout_chroms,
+            num_epochs=num_epochs,
+            asynchronous_enqueues=asynchronous_enqueues,
+            input_names=self.input_names,
+            enqueues_per_thread=enqueues_per_thread)
 
-    def get_interval_queue(self, dataset, dataset_id, num_epochs=None,
+    def get_interval_queue(self, dataset, dataset_id, selected_chroms=None,
+                           holdout_chroms=None, num_epochs=None,
                            read_batch_size=1, shuffle=True, pos_sampling_rate=None):
         intervals_file = dataset['intervals_file']
 
@@ -83,14 +101,21 @@ class GenomeFlowInterface(object):
                         return np.random.uniform() < pos_sampling_rate
 
         interval_queue = gf.io.StreamingIntervalQueue(
-            intervals_file, read_batch_size=read_batch_size,
+            intervals_file,
+            selected_chroms=selected_chroms,
+            holdout_chroms=holdout_chroms,
+            read_batch_size=read_batch_size,
             name='{}-interval-queue'.format(dataset_id),
-            num_epochs=num_epochs, sampling_fn=sampling_fn,
-            capacity=50000, shuffle=shuffle,
-            min_after_dequeue=40000, summary=True)
+            num_epochs=num_epochs,
+            sampling_fn=sampling_fn,
+            capacity=50000,
+            shuffle=shuffle,
+            min_after_dequeue=40000,
+            summary=True)
         return interval_queue
 
-    def get_queue(self, dataset, num_epochs=None, asynchronous_enqueues=True,
+    def get_queue(self, dataset, selected_chroms=None, holdout_chroms=None,
+                  num_epochs=None, asynchronous_enqueues=True,
                   pos_sampling_rate=None, input_names=None, shuffle=False,
                   enqueues_per_thread=[128]):
         examples_queues = {

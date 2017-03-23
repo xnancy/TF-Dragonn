@@ -165,7 +165,8 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
 
     logger.info("Setting up a genomeflow interface")
     data_interface = genomeflow_interface.GenomeFlowInterface(
-        datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
+        datasetspec, intervalspec, modelspec,
+        validation_chroms=VALID_CHROMS, holdout_chroms=HOLDOUT_CHROMS)
 
     logger.info("shuffle: {}".format(data_interface.shuffle))
     logger.info("pos_sampling_rate: {}".format(
@@ -270,6 +271,7 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
 
 
 def test_tf_dragonn(logdir, visiblegpus, test_size=None):
+    """Currently this tests on *all chroms* (no holdout)"""
     logdir = os.path.abspath(logdir)
     assert(os.path.exists(logdir))
     assert(logdir.startswith(LOGDIR_PREFIX))
@@ -298,7 +300,7 @@ def test_tf_dragonn(logdir, visiblegpus, test_size=None):
 
     logger.info('Setting up genomeflow queues')
     data_interface = genomeflow_interface.GenomeFlowInterface(
-        datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
+        datasetspec, intervalspec, modelspec)
     validation_queue = data_interface.get_validation_queue()
 
     logger.info('loading  model and trainer')

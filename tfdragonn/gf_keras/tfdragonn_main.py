@@ -11,14 +11,13 @@ import os
 import logging
 import ntpath
 import numpy as np
-import pandas as pd
 import pybedtools
 import shutil
 
 from keras import backend as K
 import tensorflow as tf
 
-from tfdragonn.datasets import parse_raw_intervals_config_file ## TODO: reimplement
+# from tfdragonn.datasets import parse_raw_intervals_config_file  # TODO: reimplement
 import database
 import genomeflow_interface
 import models
@@ -41,10 +40,10 @@ IN_MEMORY = False
 # BATCH_SIZE = 128
 BATCH_SIZE = 256
 # EPOCH_SIZE = 250000
-EPOCH_SIZE = 2500000 
+EPOCH_SIZE = 2500000
 # EPOCH_SIZE = 5000000
-LEARNING_RATE=0.0003
-#LEARNING_RATE=0.00003
+LEARNING_RATE = 0.0003
+# LEARNING_RATE=0.00003
 
 # TF Session Settings
 DEFER_DELETE_SIZE = int(250 * 1e6)  # 250MB
@@ -58,41 +57,43 @@ logger = logging.getLogger('train-wrapper')
 
 def parse_args():
     parser = argparse.ArgumentParser('main TF-DragoNN script')
-    subparsers = parser.add_subparsers(help='tf-dragonn command help', dest='command')
+    subparsers = parser.add_subparsers(
+        help='tf-dragonn command help', dest='command')
 
     train_parser = subparsers.add_parser('train', help="main training script")
     train_parser.add_argument('datasetspec', type=os.path.abspath,
-                        help='Dataset parameters json file path')
+                              help='Dataset parameters json file path')
     train_parser.add_argument('intervalspec', type=os.path.abspath,
-                        help='Interval parameters json file path')
+                              help='Interval parameters json file path')
     train_parser.add_argument('modelspec', type=os.path.abspath,
-                        help='Model parameters json file path')
+                              help='Model parameters json file path')
     train_parser.add_argument('logdir', type=os.path.abspath,
-                        help='Log directory, also used as globally unique run identifier')
+                              help='Log directory, also used as globally unique run identifier')
     train_parser.add_argument('--visiblegpus', type=str,
-                        required=True, help='Visible GPUs string')
+                              required=True, help='Visible GPUs string')
     train_parser.add_argument('--kfold-cv', action='store_true', default=False,
                               help='Performs K-fold CV with heldout celltypes')
 
     test_parser = subparsers.add_parser('test', help="main testing script")
     test_parser.add_argument('logdir', type=os.path.abspath,
-                        help='Model log directory')
+                             help='Model log directory')
     test_parser.add_argument('--visiblegpus', type=str,
-                        required=True, help='Visible GPUs string')
+                             required=True, help='Visible GPUs string')
     test_parser.add_argument('--test-size', type=int,
                              help='Limit test size, full test otherwise.')
 
-    predict_parser = subparsers.add_parser('predict', help="main prediction script")
+    predict_parser = subparsers.add_parser(
+        'predict', help="main prediction script")
     predict_parser.add_argument('datasetspec', type=os.path.abspath,
-                        help='Dataset parameters json file path')
+                                help='Dataset parameters json file path')
     predict_parser.add_argument('intervalspec', type=os.path.abspath,
-                        help='Interval parameters json file path')
+                                help='Interval parameters json file path')
     predict_parser.add_argument('logdir', type=os.path.abspath,
-                        help='Model log directory')
+                                help='Model log directory')
     predict_parser.add_argument('prefix', type=os.path.abspath,
                                 help='prefix to bedGraphs with predictions')
     predict_parser.add_argument('--visiblegpus', type=str,
-                        required=True, help='Visible GPUs string')
+                                required=True, help='Visible GPUs string')
     predict_parser.add_argument('--flank-size', type=int, default=400,
                                 help='Trims input intervals by this size. Default: 400.')
 
@@ -101,17 +102,18 @@ def parse_args():
                                                  'Writes an intervalspec file.')
     label_regions_parser.add_argument('raw_intervals_config_file', type=str,
                                       help='includes task names and map from dataset ids to raw interval files')
-    label_regions_parser.add_argument('prefix', type=str, help='prefix to output files')
+    label_regions_parser.add_argument(
+        'prefix', type=str, help='prefix to output files')
     label_regions_parser.add_argument('--n-jobs', type=int, default=1,
                                       help='num of processes.\nDefault: 1.')
     label_regions_parser.add_argument('--bin-size', type=int, default=200,
-                                       help='size of bins for labeling.\nDefault: 200.')
+                                      help='size of bins for labeling.\nDefault: 200.')
     label_regions_parser.add_argument('--flank-size', type=int, default=400,
-                                       help='size of flanks around labeled bins.\nDefault: 400.')
+                                      help='size of flanks around labeled bins.\nDefault: 400.')
     label_regions_parser.add_argument('--stride', type=int, default=50,
-                                       help='spacing between consecutive bins.\nDefault: 50.')
+                                      help='spacing between consecutive bins.\nDefault: 50.')
     label_regions_parser.add_argument('--genome', type=str, default='hg19',
-                                       help='Genome name.\nDefault: hg19.'
+                                      help='Genome name.\nDefault: hg19.'
                                       '\nOptions: hg18, hg38, mm9, mm10, dm3, dm6.')
 
     args = vars(parser.parse_args())
@@ -166,7 +168,8 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
         datasetspec, intervalspec, modelspec, VALID_CHROMS, HOLDOUT_CHROMS)
 
     logger.info("shuffle: {}".format(data_interface.shuffle))
-    logger.info("pos_sampling_rate: {}".format(data_interface.pos_sampling_rate))
+    logger.info("pos_sampling_rate: {}".format(
+        data_interface.pos_sampling_rate))
 
     if kfold_cv and len(data_interface.training_dataset) > 1:
         logger.info("Setting up K-fold CV with a heldout celltype")
@@ -182,8 +185,10 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
                                 for dataset_id, dataset_values in data_interface.validation_dataset.items()}
         # train a model for each held out dataset
         for valid_dataset_id, valid_example_queue in valid_example_queues.items():
-            logger.info("Using dataset {} for heldout validation".format(valid_dataset_id))
-            fold_logdir = os.path.join(os.path.abspath(logdir), valid_dataset_id)
+            logger.info(
+                "Using dataset {} for heldout validation".format(valid_dataset_id))
+            fold_logdir = os.path.join(
+                os.path.abspath(logdir), valid_dataset_id)
             if os.path.isdir(fold_logdir):  # remove empty directories for debugging
                 if len(os.listdir(fold_logdir)) == 0:
                     shutil.rmtree(fold_logdir)
@@ -193,8 +198,10 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
             logger.info('Fold logdir path: {}'.format(fold_logdir))
 
             logger.info('initializing trainer')
-            loggers.setup_logger('{}-trainer'.format(valid_dataset_id), os.path.join(fold_logdir, "metrics.log"))
-            trainer_logger = logging.getLogger('{}-trainer'.format(valid_dataset_id))
+            loggers.setup_logger(
+                '{}-trainer'.format(valid_dataset_id), os.path.join(fold_logdir, "metrics.log"))
+            trainer_logger = logging.getLogger(
+                '{}-trainer'.format(valid_dataset_id))
             trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
                                                  optimizer='adam',
                                                  lr=LEARNING_RATE,
@@ -218,23 +225,26 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
                           save_best_model_to_prefix=os.path.join(fold_logdir, "model"))
 
             # copy datasetspec, intervalspec, and models params to log dir
-            shutil.copyfile(datasetspec, os.path.join(fold_logdir, ntpath.basename('datasetspec.json')))
-            shutil.copyfile(intervalspec, os.path.join(fold_logdir, ntpath.basename('intervalspec.json')))
-            shutil.copyfile(modelspec, os.path.join(fold_logdir, ntpath.basename('modelspec.json')))
+            shutil.copyfile(datasetspec, os.path.join(
+                fold_logdir, ntpath.basename('datasetspec.json')))
+            shutil.copyfile(intervalspec, os.path.join(
+                fold_logdir, ntpath.basename('intervalspec.json')))
+            shutil.copyfile(modelspec, os.path.join(
+                fold_logdir, ntpath.basename('modelspec.json')))
 
     else:
         logger.info('Setting up genomeflow queues')
         train_queue = data_interface.get_train_queue()
         validation_queue = data_interface.get_validation_queue()
-        #normalized_pos_rate = train_queue.normalized_pos_rate ## TODO (johnny): finish this
-        #class_weights = {0: 1,
+        # normalized_pos_rate = train_queue.normalized_pos_rate ## TODO (johnny): finish this
+        # class_weights = {0: 1,
         #                 1: 1 / normalized_pos_rate}
 
         logger.info('initializing  model and trainer')
         # jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
         # with jit_scope():
         model = models.model_from_minimal_config(
-                modelspec, train_queue.output_shapes, len(data_interface.task_names))
+            modelspec, train_queue.output_shapes, len(data_interface.task_names))
         loggers.setup_logger('trainer', os.path.join(logdir, "metrics.log"))
         trainer_logger = logging.getLogger('trainer')
         trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names,
@@ -251,9 +261,12 @@ def train_tf_dragonn(datasetspec, intervalspec, modelspec, logdir, visiblegpus, 
                       save_best_model_to_prefix=os.path.join(logdir, "model"))
 
         # copy datasetspec, intervalspec, and models params to log dir
-        shutil.copyfile(datasetspec, os.path.join(logdir, ntpath.basename('datasetspec.json')))
-        shutil.copyfile(intervalspec, os.path.join(logdir, ntpath.basename('intervalspec.json')))
-        shutil.copyfile(modelspec, os.path.join(logdir, ntpath.basename('modelspec.json')))
+        shutil.copyfile(datasetspec, os.path.join(
+            logdir, ntpath.basename('datasetspec.json')))
+        shutil.copyfile(intervalspec, os.path.join(
+            logdir, ntpath.basename('intervalspec.json')))
+        shutil.copyfile(modelspec, os.path.join(
+            logdir, ntpath.basename('modelspec.json')))
 
 
 def test_tf_dragonn(logdir, visiblegpus, test_size=None):
@@ -294,8 +307,10 @@ def test_tf_dragonn(logdir, visiblegpus, test_size=None):
     trainer = trainers.ClassifierTrainer(task_names=data_interface.task_names)
 
     logger.info('testing model')
-    classification_result = trainer.test(model, validation_queue, test_size=test_size)
+    classification_result = trainer.test(
+        model, validation_queue, test_size=test_size)
     logger.info(classification_result)
+
 
 def predict_tf_dragonn(datasetspec, intervalspec, logdir, visiblegpus, flank_size, prefix):
     datasetspec = os.path.abspath(datasetspec)
@@ -337,7 +352,8 @@ def predict_tf_dragonn(datasetspec, intervalspec, logdir, visiblegpus, flank_siz
 
     logger.info('loading  model and trainer')
     model = models.model_from_minimal_config(modelspec,
-                                             example_queues.values()[0].output_shapes,
+                                             example_queues.values()[
+                                                 0].output_shapes,
                                              len(data_interface.task_names))
     model.load_weights(os.path.join(logdir, 'model.weights.h5'))
     trainer = trainers.ClassifierTrainer()
@@ -361,11 +377,13 @@ def predict_tf_dragonn(datasetspec, intervalspec, logdir, visiblegpus, flank_siz
                                            intervals['end'],
                                            predictions[:, task_indx])
             bedtool = pybedtools.BedTool(intervals)
-            output_fname = "{}.{}.{}.tab.gz".format(prefix, task_name, dataset_id)
+            output_fname = "{}.{}.{}.tab.gz".format(
+                prefix, task_name, dataset_id)
             bedtool.sort().saveas(output_fname)
             logger.info("\nSaved {} predictions in dataset {} to {}".format(
                 task_name, dataset_id, output_fname))
     logger.info('Done!')
+
 
 def main_label_regions(raw_intervals_config_file, prefix,
                        n_jobs=1, bin_size=200, flank_size=400, stride=50, genome='hg19'):
@@ -373,32 +391,45 @@ def main_label_regions(raw_intervals_config_file, prefix,
     Generates regions and labels files for each dataset.
     Writes new data config file with the generated files.
     """
-    raw_intervals_config = parse_raw_intervals_config_file(raw_intervals_config_file)
-    processed_intervals_dict = collections.OrderedDict([("task_names", raw_intervals_config.task_names)])
-    logger.info("Generating regions and labels for datasets in {}...".format(raw_intervals_config_file))
+    raw_intervals_config = parse_raw_intervals_config_file(
+        raw_intervals_config_file)
+    processed_intervals_dict = collections.OrderedDict(
+        [("task_names", raw_intervals_config.task_names)])
+    logger.info("Generating regions and labels for datasets in {}...".format(
+        raw_intervals_config_file))
     for dataset_id, raw_intervals in raw_intervals_config:
-        logger.info("Generating regions and labels for dataset {}...".format(dataset_id))
-        path_to_dataset_intervals_labels = os.path.abspath("{}.{}.intervals_labels.tsv.gz".format(prefix, dataset_id))
+        logger.info(
+            "Generating regions and labels for dataset {}...".format(dataset_id))
+        path_to_dataset_intervals_labels = os.path.abspath(
+            "{}.{}.intervals_labels.tsv.gz".format(prefix, dataset_id))
         if os.path.isfile(path_to_dataset_intervals_labels):
             logger.info("intervals_labels file {} already exists. skipping dataset {}!".format(
                 path_to_dataset_intervals_labels, dataset_id))
         else:
             intervals, labels = get_tf_predictive_setup(raw_intervals.feature_beds, region_bedtool=raw_intervals.region_bed,
-                                                      ambiguous_feature_bedtools=raw_intervals.ambiguous_feature_beds,
-                                                      bin_size=bin_size, flank_size=flank_size, stride=stride,
-                                                      filter_flank_overlaps=False, genome=genome, n_jobs=n_jobs)
-            intervals_labels_array = np.empty((labels.shape[0], 3 + labels.shape[1]), np.dtype((str, 10)))
-            intervals_labels_array[:, :3] = intervals.to_dataframe().as_matrix()[:, :3]
+                                                        ambiguous_feature_bedtools=raw_intervals.ambiguous_feature_beds,
+                                                        bin_size=bin_size, flank_size=flank_size, stride=stride,
+                                                        filter_flank_overlaps=False, genome=genome, n_jobs=n_jobs)
+            intervals_labels_array = np.empty(
+                (labels.shape[0], 3 + labels.shape[1]), np.dtype((str, 10)))
+            intervals_labels_array[:, :3] = intervals.to_dataframe().as_matrix()[
+                :, :3]
             intervals_labels_array[:, 3:] = labels
             #np.save(path_to_dataset_intervals_labels, intervals_labels_array)
-            np.savetxt(path_to_dataset_intervals_labels, intervals_labels_array, delimiter='\t', fmt='%s')
-            logger.info("Saved intervals_labels file to {}".format(path_to_dataset_intervals_labels))
-        processed_intervals_dict[dataset_id] = {"intervals_labels": path_to_dataset_intervals_labels}
+            np.savetxt(path_to_dataset_intervals_labels,
+                       intervals_labels_array, delimiter='\t', fmt='%s')
+            logger.info("Saved intervals_labels file to {}".format(
+                path_to_dataset_intervals_labels))
+        processed_intervals_dict[dataset_id] = {
+            "intervals_labels": path_to_dataset_intervals_labels}
     # write processed intervals config file
     processed_intervals_config_file = os.path.abspath("{}.json".format(prefix))
-    json.dump(processed_intervals_dict, open(processed_intervals_config_file, "w"), indent=4)
-    logger.info("Wrote new data config file to {}.".format(processed_intervals_config_file))
+    json.dump(processed_intervals_dict, open(
+        processed_intervals_config_file, "w"), indent=4)
+    logger.info("Wrote new data config file to {}.".format(
+        processed_intervals_config_file))
     logger.info("Done!")
+
 
 def main():
     command_functions = {'train': train_tf_dragonn,
@@ -411,4 +442,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

@@ -18,6 +18,7 @@ from keras.models import Model
 
 import pwms
 
+
 def model_from_config(model_config_file_path):
     """Load a model from a json config file."""
     thismodule = sys.modules[__name__]
@@ -106,12 +107,11 @@ model_inputs = {
         "data/tss_counts",
         "data/tss_mean_tpm",
         "data/tss_max_tpm"]
-    
+
 }
 
 
 def model_inputs_from_config(model_config_file_path):
-    thismodule = sys.modules[__name__]
     with open(model_config_file_path, 'r') as fp:
         config = json.load(fp)
     return model_inputs[config['model_class']]
@@ -205,9 +205,12 @@ class SequenceBaselineClassifier(Classifier):
         inputs = self.reshape_keras_inputs(keras_inputs)
 
         # configure initialization weights
-        conv_weights = pwms.pwms2conv_weights(pwm_paths) ## (nb_filter, filter_length, input_dim)
-        conv_weights = np.rollaxis(conv_weights, 0, 3) ## (filter_length, input_dim, nb_filter)
-        conv_weights = np.expand_dims(conv_weights, 1) ## (filter_length, 1, input_dim, nb_filter)
+        # (nb_filter, filter_length, input_dim)
+        conv_weights = pwms.pwms2conv_weights(pwm_paths)
+        # (filter_length, input_dim, nb_filter)
+        conv_weights = np.rollaxis(conv_weights, 0, 3)
+        # (filter_length, 1, input_dim, nb_filter)
+        conv_weights = np.expand_dims(conv_weights, 1)
         conv_biases = np.zeros((conv_weights.shape[3]))
         weights = [conv_weights, conv_biases]
 
@@ -216,7 +219,7 @@ class SequenceBaselineClassifier(Classifier):
         seq_preds = Convolution1D(
             conv_weights.shape[3], conv_weights.shape[0],
             weights=weights, trainable=False)(seq_preds)
-        seq_preds = BatchNormalization()(seq_preds) ## this is necessary
+        seq_preds = BatchNormalization()(seq_preds)  # this is necessary
         seq_preds = Activation('relu')(seq_preds)
         if dropout > 0:
             seq_preds = Dropout(dropout)(seq_preds)
@@ -329,9 +332,12 @@ class SequenceAndDnaseBaselineClassifier(Classifier):
         inputs = self.reshape_keras_inputs(keras_inputs)
 
         # configure initialization weights
-        conv_weights = pwms.pwms2conv_weights(pwm_paths) ## (nb_filter, filter_length, input_dim)
-        conv_weights = np.rollaxis(conv_weights, 0, 3) ## (filter_length, input_dim, nb_filter)
-        conv_weights = np.expand_dims(conv_weights, 1) ## (filter_length, 1, input_dim, nb_filter)
+        # (nb_filter, filter_length, input_dim)
+        conv_weights = pwms.pwms2conv_weights(pwm_paths)
+        # (filter_length, input_dim, nb_filter)
+        conv_weights = np.rollaxis(conv_weights, 0, 3)
+        # (filter_length, 1, input_dim, nb_filter)
+        conv_weights = np.expand_dims(conv_weights, 1)
         conv_biases = np.zeros((conv_weights.shape[3]))
         weights = [conv_weights, conv_biases]
 
@@ -340,7 +346,7 @@ class SequenceAndDnaseBaselineClassifier(Classifier):
         seq_preds = Convolution1D(
             conv_weights.shape[3], conv_weights.shape[0],
             weights=weights, trainable=False)(seq_preds)
-        seq_preds = BatchNormalization()(seq_preds) ## this is necessary
+        seq_preds = BatchNormalization()(seq_preds)  # this is necessary
         seq_preds = Activation('relu')(seq_preds)
         if seq_conv_dropout > 0:
             seq_preds = Dropout(dropout)(seq_preds)
@@ -439,7 +445,8 @@ class ShapeAndDnaseClassifier(Classifier):
                 dnase_preds = Dropout(dnase_conv_dropout)(dnase_preds)
 
         # stack and convolve
-        logits = Merge(mode='concat', concat_axis=-1)([shape_preds, dnase_preds])
+        logits = Merge(mode='concat', concat_axis=-
+                       1)([shape_preds, dnase_preds])
         for nb_filter, nb_col in zip(num_combined_filters, combined_conv_width):
             logits = Convolution1D(nb_filter, nb_col, 'he_normal')(logits)
             if batch_norm:

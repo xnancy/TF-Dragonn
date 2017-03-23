@@ -59,8 +59,10 @@ class ClassifierTrainer(object):
         self.logger.info('batch size: {}'.format(self.batch_size))
         self.logger.info('epoch size: {}'.format(self.epoch_size))
         self.logger.info('max num of epochs: {}'.format(self.num_epochs))
-        self.logger.info('early stopping metrics: {}'.format(self.early_stopping_metric))
-        self.logger.info('early stopping patience: {}'.format(self.early_stopping_patience))
+        self.logger.info('early stopping metrics: {}'.format(
+            self.early_stopping_metric))
+        self.logger.info('early stopping patience: {}'.format(
+            self.early_stopping_patience))
         process = psutil.Process(os.getpid())
 
         self.compile(model)
@@ -126,7 +128,8 @@ class ClassifierTrainer(object):
             raise e
 
         if verbose:  # end of training messages
-            self.logger.info('Finished training after {} epochs.'.format(epoch))
+            self.logger.info(
+                'Finished training after {} epochs.'.format(epoch))
             if save_best_model_to_prefix is not None:
                 self.logger.info("The best model's architecture and weights (from epoch {0}) "
                                  'were saved to {1}.arch.json and {1}.weights.h5'.format(
@@ -173,8 +176,8 @@ class ClassifierTrainer(object):
             del iterator
 
         except Exception as e:
-            if iterator is not None:
-                iterator.close()
+            if iterator is not None:  # NOQA
+                iterator.close() # NOQA
             raise e
 
         predictions = np.vstack(predictions)
@@ -208,7 +211,7 @@ class ClassifierTrainer(object):
                 ends.append(batch['intervals/end'])
                 predictions.append(
                     np.vstack(model.model.predict_on_batch(batch)))
-                
+
                 if verbose:
                     if batch_indx % BATCH_FREQ_UPDATE_MEM_USAGE == 0:
                         rss_minus_shr_memory = get_rss_prop()
@@ -220,8 +223,8 @@ class ClassifierTrainer(object):
             del iterator
 
         except Exception as e:
-            if iterator is not None:
-                iterator.close()
+            if iterator is not None:  # NOQA
+                iterator.close()  # NOQA
             raise e
 
         # concatenate intervals and predictions

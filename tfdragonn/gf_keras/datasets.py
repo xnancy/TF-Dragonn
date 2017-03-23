@@ -5,9 +5,6 @@ from __future__ import print_function
 from collections import OrderedDict
 import json
 
-import numpy as np
-from pybedtools import BedTool
-
 RAW_INPUT_NAMES = set(['genome_fasta', 'dnase_bigwig', 'dnase_peaks_bed',
                        'gencode_tss', 'gencode_annotation', 'gencode_polyA',
                        'gencode_lncRNA', 'gencode_tRNA',
@@ -33,14 +30,14 @@ PROCESSED_INPUT_NAMES = set(['genome_data_dir', 'dnase_data_dir',
 def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
     """Parse the processed inputs and intervals files, return a dataset dictionary."""
 
-    all_datasets = {}
+    inputs_files = {}
     with open(processed_inputs_file, 'r') as fp:
         data = json.load(fp)
     for cur_dataset_id, cur_dataset_dict in data.items():
-        all_datasets[cur_dataset_id] = {}
+        inputs_files[cur_dataset_id] = {}
         for input_id in PROCESSED_INPUT_NAMES:
             if input_id in cur_dataset_dict:
-                all_datasets[cur_dataset_id][
+                inputs_files[cur_dataset_id][
                     input_id] = cur_dataset_dict[input_id]
     dataset = {}
 
@@ -48,63 +45,19 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
         data = json.load(fp)
     task_names = data['task_names']
 
-    for dataset_id, dataset_dict in data.items():
+    for cur_dataset_id, cur_dataset_dict in data.items():
 
-        if dataset_id == 'task_names':
+        if cur_dataset_id == 'task_names':
             continue
 
-        if dataset_id not in dataset:
-            dataset[dataset_id] = {'task_names': task_names}
-
-        dataset[dataset_id]['inputs'] = all_datasets[dataset_id]
-
-        if 'labels' in dataset_dict.keys():
-            dataset[dataset_id]['labels'] = np.load(dataset_dict['labels'])
-
-        bt = BedTool(dataset_dict['regions'])
-        intervals_dict = {k: bt.to_dataframe()[k].as_matrix() for k in [
-            'chrom', 'start', 'end']}
-        dataset[dataset_id]['intervals'] = intervals_dict
+        dataset[cur_dataset_id] = {
+            'task_names': task_names,
+            'inputs': inputs_files[cur_dataset_id],
+            'intervals_file': cur_dataset_dict['intervals_file'],
+        }
 
     return dataset
 
-
-def parse_inputs_and_intervals_with_holdout(processed_inputs_file, processed_intervals_file,
-                                            validation_chroms=[], holdout_chroms=[]):
-    dataset = parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file)
-    train_dataset = {}
-    valid_dataset = {}
-
-    for dataset_id, dataset_fields in dataset.items():
-
-        intervals = dataset_fields['intervals']
-        inputs = dataset_fields['inputs']
-        task_names = dataset_fields['task_names']
-        labels = dataset_fields.get('labels', None)
-
-        validation_idxs = np.in1d(intervals['chrom'], validation_chroms)
-        holdout_idxs = np.in1d(intervals['chrom'], holdout_chroms)
-        train_idxs = ~ np.logical_or(validation_idxs, holdout_idxs)
-
-        train_dataset[dataset_id] = {
-            'task_names': task_names,
-            'inputs': inputs,
-        }
-        train_dataset[dataset_id]['intervals'] = {k: intervals[k][train_idxs]
-                                                  for k in ['chrom', 'start', 'end']}
-        if labels is not None:
-            train_dataset[dataset_id]['labels'] = labels[train_idxs]
-
-        valid_dataset[dataset_id] = {
-            'task_names': task_names,
-            'inputs': inputs,
-        }
-        valid_dataset[dataset_id]['intervals'] = {k: intervals[k][validation_idxs]
-                                                  for k in ['chrom', 'start', 'end']}
-        if labels is not None:
-            valid_dataset[dataset_id]['labels'] = labels[validation_idxs]
-
-    return train_dataset, valid_dataset
 
 def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
     """parses raw inputs file, returns inputs dictionary"""
@@ -136,29 +89,3 @@ def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
                     raise ValueError(err_msg)
 
     return datasets
-
-
-def parse_processed_intervals(processed_intervals_file, tasks=None):
-    """Parse the processed intervals files, return a data dictionary."""
-    with open(processed_intervals_file, 'r') as fp:
-        data = json.load(fp, object_pairs_hook=OrderedDict)
-
-    if tasks: # subset task_names
-        task2idx = {t: i for i, t in enumerate(data['task_names'])}
-        for t_name in tasks:
-            if t_name not in task2idx:
-                raise ValueError('Task {} was not found in intervals file {}'.format(
-                    t_name, processed_intervals_file))
-        task_idxs = np.array([task2idx[t] for t in tasks])
-        data['task_names'] = tasks
-
-    for dataset_id, dataset_dict in data.items():
-        if dataset_id == 'task_names':
-            continue
-        if 'labels' in dataset_dict.keys():
-            data[dataset_id]['labels'] = np.load(dataset_dict['labels'])
-            if tasks:
-                data[dataset_id]['labels'] = data[
-                    dataset_id]['labels'][:, task_idxs]
-
-    return data

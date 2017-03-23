@@ -5,6 +5,7 @@ from __future__ import print_function
 import os.path
 import yaml
 import json
+import time
 
 import psycopg2
 
@@ -45,6 +46,7 @@ def get_all_runs():
 
 def add_run(run_id, data_config_file_path, interval_config_file_path,
             model_config_file_path, log_directory, metadata={}):
+    metadata['time'] = time.strftime("%Y-%m-%d:::%H:%M:%S")
     metadata = json.dumps(metadata)  # json serialize
     assert isinstance(run_id, str)
     with _get_connection() as connection:

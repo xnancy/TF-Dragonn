@@ -17,7 +17,8 @@ import shutil
 from keras import backend as K
 import tensorflow as tf
 
-# from tfdragonn.datasets import parse_raw_intervals_config_file  # TODO: reimplement
+from tfdragonn.datasets import parse_raw_intervals_config_file  # TODO:
+# reimplement
 import database
 import genomeflow_interface
 import models
@@ -53,6 +54,11 @@ GPU_MEM_PROP = 0.45  # Allows 2x sessions / gpu
 logging.basicConfig(
     format='%(levelname)s %(asctime)s %(message)s', level=logging.DEBUG)
 logger = logging.getLogger('train-wrapper')
+
+backend = K.backend()
+if backend != 'tensorflow':
+    raise ValueError(
+        'Only the keras tensorflow backend is supported, currently using {}'.format(backend))
 
 
 def parse_args():
@@ -402,28 +408,28 @@ def main_label_regions(raw_intervals_config_file, prefix,
     for dataset_id, raw_intervals in raw_intervals_config:
         logger.info(
             "Generating regions and labels for dataset {}...".format(dataset_id))
-        path_to_dataset_intervals_labels = os.path.abspath(
-            "{}.{}.intervals_labels.tsv.gz".format(prefix, dataset_id))
-        if os.path.isfile(path_to_dataset_intervals_labels):
-            logger.info("intervals_labels file {} already exists. skipping dataset {}!".format(
-                path_to_dataset_intervals_labels, dataset_id))
+        path_to_dataset_intervals_file = os.path.abspath(
+            "{}.{}.intervals_file.tsv.gz".format(prefix, dataset_id))
+        if os.path.isfile(path_to_dataset_intervals_file):
+            logger.info("intervals_file file {} already exists. skipping dataset {}!".format(
+                path_to_dataset_intervals_file, dataset_id))
         else:
             intervals, labels = get_tf_predictive_setup(raw_intervals.feature_beds, region_bedtool=raw_intervals.region_bed,
                                                         ambiguous_feature_bedtools=raw_intervals.ambiguous_feature_beds,
                                                         bin_size=bin_size, flank_size=flank_size, stride=stride,
                                                         filter_flank_overlaps=False, genome=genome, n_jobs=n_jobs)
-            intervals_labels_array = np.empty(
+            intervals_file_array = np.empty(
                 (labels.shape[0], 3 + labels.shape[1]), np.dtype((str, 10)))
-            intervals_labels_array[:, :3] = intervals.to_dataframe().as_matrix()[
+            intervals_file_array[:, :3] = intervals.to_dataframe().as_matrix()[
                 :, :3]
-            intervals_labels_array[:, 3:] = labels
-            #np.save(path_to_dataset_intervals_labels, intervals_labels_array)
-            np.savetxt(path_to_dataset_intervals_labels,
-                       intervals_labels_array, delimiter='\t', fmt='%s')
-            logger.info("Saved intervals_labels file to {}".format(
-                path_to_dataset_intervals_labels))
+            intervals_file_array[:, 3:] = labels
+            #np.save(path_to_dataset_intervals_file, intervals_file_array)
+            np.savetxt(path_to_dataset_intervals_file,
+                       intervals_file_array, delimiter='\t', fmt='%s')
+            logger.info("Saved intervals_file file to {}".format(
+                path_to_dataset_intervals_file))
         processed_intervals_dict[dataset_id] = {
-            "intervals_labels": path_to_dataset_intervals_labels}
+            "intervals_file": path_to_dataset_intervals_file}
     # write processed intervals config file
     processed_intervals_config_file = os.path.abspath("{}.json".format(prefix))
     json.dump(processed_intervals_dict, open(

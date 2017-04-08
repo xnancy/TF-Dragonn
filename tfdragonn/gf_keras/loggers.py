@@ -5,7 +5,7 @@ import sys
 _loggers = {}
 
 logging.basicConfig(
-    format='%(levelname)s %(asctime)s %(name)s: %(message)s', level=logging.DEBUG)
+    format='%(levelname)s %(name)s %(asctime)s] %(message)s', level=logging.DEBUG)
 
 
 def get_logger(logger_name, logdir=None, stdout=True, level=logging.INFO):
@@ -31,6 +31,7 @@ def add_logdir(logger_name, logdir, level=logging.INFO):
 
 def setup_logger(logger_name, log_file=None, stdout=True, level=logging.INFO):
     logger = logging.getLogger(logger_name)
+    logger.handlers = []
     logger.setLevel(level)
     if log_file is not None:
         file_handler = logging.FileHandler(log_file, mode='w')

@@ -11,8 +11,8 @@ from keras import backend as K, optimizers
 from keras.objectives import binary_crossentropy
 from keras.utils.generic_utils import Progbar
 
-from metrics import ClassificationResult, AMBIG_LABEL
-import io_utils
+from tfdragonn.metrics import ClassificationResult, AMBIG_LABEL
+from tfdragonn import gf_io_utils
 
 BATCH_FREQ_UPDATE_MEM_USAGE = 100
 BATCH_FREQ_UPDATE_PROGBAR = 50
@@ -72,7 +72,7 @@ class ClassifierTrainer(object):
 
         train_iterator = None
         try:
-            train_iterator = io_utils.ExampleQueueIterator(
+            train_iterator = gf_io_utils.ExampleQueueIterator(
                 train_queue, num_exs_batch=self.batch_size,
                 num_epochs=self.num_epochs, num_exs_epoch=self.epoch_size)
 
@@ -144,7 +144,7 @@ class ClassifierTrainer(object):
         rss_minus_shr_memory = get_rss_prop()
 
         try:
-            iterator = io_utils.ExampleQueueIterator(
+            iterator = gf_io_utils.ExampleQueueIterator(
                 queue, num_exs_batch=batch_size, num_epochs=1,
                 allow_smaller_final_batch=True)
             if test_size is not None:
@@ -193,7 +193,7 @@ class ClassifierTrainer(object):
         rss_minus_shr_memory = get_rss_prop()
 
         try:
-            iterator = io_utils.ExampleQueueIterator(
+            iterator = gf_io_utils.ExampleQueueIterator(
                 queue, num_exs_batch=batch_size, num_epochs=1,
                 allow_smaller_final_batch=True)
 

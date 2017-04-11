@@ -1,23 +1,12 @@
 from collections import namedtuple
 import os.path
 
-import model_runner
-
-DEFAULT_HOLDOUT_CHROMS = {'chr1', 'chr8', 'chr21'}
-DEFAULT_VALID_CHROMS = {'chr9'}
-
-DEFAULT_EARLYSTOPPING_KEY = 'auPRC'
-DEFAULT_EARLYSTOPPING_PATIENCE = 4
-
-IN_MEMORY = False
-BATCH_SIZE = 256
-EPOCH_SIZE = 2500000
-LEARNING_RATE = 0.0003
+from tfdragonn import model_runner
 
 
 """
 Parameters for a model run. Format:
-{'param_name': (type, is_required (bool), default_value, help_str)}
+('param_name': (type, is_required (bool), default_value, help_str))
 """
 ModelRunParamsSpec = [
     ('datasetspec', (os.path.abspath, True, None, 'Dataset parameters json file path')),

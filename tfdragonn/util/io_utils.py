@@ -7,6 +7,7 @@ from genomedatalayer.extractors import (
 import itertools
 import numpy as np
 
+
 def batch_iter(iterable, batch_size):
     '''iterates in batches.
     '''
@@ -45,9 +46,11 @@ def generate_from_intervals(intervals, extractors, batch_size=128, indefinitely=
     batch_arrays = []
     for extractor in extractors:
         if type(extractor) in [FastaExtractor, MemmappedFastaExtractor]:
-            batch_arrays.append(np.zeros((batch_size, 1, 4, interval_length), dtype=np.float32))
+            batch_arrays.append(
+                np.zeros((batch_size, 1, 4, interval_length), dtype=np.float32))
         elif type(extractor) in [MemmappedBigwigExtractor]:
-            batch_arrays.append(np.zeros((batch_size, 1, 1, interval_length), dtype=np.float32))
+            batch_arrays.append(
+                np.zeros((batch_size, 1, 1, interval_length), dtype=np.float32))
     if indefinitely:
         batch_iterator = infinite_batch_iter(intervals, batch_size)
     else:
@@ -82,13 +85,15 @@ def test_extractor_in_generator(intervals, extractor, batch_size=128):
     X_in_memory = extractor(intervals)
     samples_per_epoch = len(intervals)
     batches_per_epoch = int(samples_per_epoch / batch_size) + 1
-    batch_array = np.zeros((batch_size, 1, 4, intervals[0].length), dtype=np.float32)
-    batch_generator = generate_from_intervals(intervals, extractor, batch_size=batch_size, indefinitely=False, batch_array=batch_array)
+    batch_array = np.zeros(
+        (batch_size, 1, 4, intervals[0].length), dtype=np.float32)
+    batch_generator = generate_from_intervals(
+        intervals, extractor, batch_size=batch_size, indefinitely=False, batch_array=batch_array)
     progbar = Progbar(target=samples_per_epoch)
     for batch_indx in xrange(1, batches_per_epoch + 1):
-        X_batch  = next(batch_generator)
-        start = (batch_indx-1)*batch_size
-        stop = batch_indx*batch_size
+        X_batch = next(batch_generator)
+        start = (batch_indx - 1) * batch_size
+        stop = batch_indx * batch_size
         if stop > samples_per_epoch:
             stop = samples_per_epoch
         # assert streamed sequences and labels match data in memory

@@ -13,15 +13,15 @@ import shutil
 from keras import backend as K
 import tensorflow as tf
 
-import database
-from genomeflow_interface import GenomeFlowInterface
-import models
-import trainers
-import loggers
+from tfdragonn import database
+from tfdragonn.genomeflow_interface import GenomeFlowInterface
+from tfdragonn import models
+from tfdragonn import trainers
+from tfdragonn import loggers
 
 
-# tfbinding project specific settings (only used if --is-tfbinding-project is
-# specified or 'IS_TFBINDING_PROJECT' is set as an environment variable)
+# tf-binding project specific settings (only used if --is-tfbinding-project is
+# specified, or the environment variable 'IS_TFBINDING_PROJECT' is set)
 IS_TFBINDING_PROJECT = False
 TFBINDING_DIR_PREFIX = '/srv/scratch/tfbinding/'
 TFBINDING_LOGDIR_PREFIX = '/srv/scratch/tfbinding/tf_logs/'

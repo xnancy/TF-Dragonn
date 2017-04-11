@@ -1,9 +1,13 @@
-from __future__ import absolute_import, division, print_function
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
 from collections import OrderedDict
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 
 AMBIG_LABEL = -1
+
 
 def positive_accuracy(labels, predictions, threshold=0.5):
     return 100 * (predictions[labels == 1] > threshold).mean()
@@ -40,7 +44,7 @@ class ClassificationResult(object):
         non_ambig_task_names = []
         for i, (task_labels, task_predictions) in enumerate(zip(labels.T, predictions.T)):
             non_ambig_label_indxs = np.where(task_labels != AMBIG_LABEL)[0]
-            if len(non_ambig_label_indxs) == 0: # skip ambiguous tasks
+            if len(non_ambig_label_indxs) == 0:  # skip ambiguous tasks
                 continue
             task_labels = task_labels[non_ambig_label_indxs]
             task_predictions = task_predictions[non_ambig_label_indxs]

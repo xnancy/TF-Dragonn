@@ -10,10 +10,9 @@ config = {
     'install_requires': ['numpy>=1.9', 'keras', 'deeplift', 'joblib', 'sklearn', 'future', 'psutil', 'pybedtools'],
     'dependency_links': ['https://github.com/kundajelab/deeplift/tarball/master#egg=deeplift-0.2'],
     'scripts': ["scripts/test_io_utils.py"],
-    'entry_points': {'console_scripts': ['tfdragonn = tfdragonn.__main__:main',
-                                         'tfdragonn_tf = tfdragonn.tensorflow.__main__:main']},
+    'entry_points': {'console_scripts': ['tfdragonn = tfdragonn.tfdragonn_main:main']},
     'name': 'tfdragonn'
 }
 
-if __name__== '__main__':
+if __name__ == '__main__':
     setup(**config)

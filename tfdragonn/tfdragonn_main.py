@@ -7,15 +7,15 @@ from __future__ import print_function
 import argparse
 import sys
 
-import model_runner
-import preprocessing
+import tfdragonn.model_runner
+import tfdragonn.preprocessing
 
 
 command_functions = {
-    'train': model_runner.TrainRunner().run_from_args,
-    'test': model_runner.TestRunner().run_from_args,
-    'predict': model_runner.PredictRunner().run_from_args,  # TODO: make a predict module
-    'labelregions': preprocessing.label_regions,
+    'train': tfdragonn.model_runner.TrainRunner().run_from_args,
+    'test': tfdragonn.model_runner.TestRunner().run_from_args,
+    'predict': tfdragonn.model_runner.PredictRunner().run_from_args,  # TODO: make a predict module
+    'labelregions': tfdragonn.preprocessing.preprocess.label_regions,
 }
 commands_str = ', '.join(command_functions.keys())
 

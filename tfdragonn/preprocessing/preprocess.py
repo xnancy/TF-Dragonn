@@ -10,9 +10,9 @@ import json
 import os
 import numpy as np
 
-import loggers
-from tfdragonn.datasets import parse_raw_intervals_config_file
-from intervals import get_tf_predictive_setup
+from tfdragonn import loggers
+from tfdragonn.preprocessing.raw_datasets import parse_raw_intervals_config_file
+from tfdragonn.preprocssing.intervals import get_tf_predictive_setup
 
 
 LOGGER_NAME = 'tfdragonn-preprocess'

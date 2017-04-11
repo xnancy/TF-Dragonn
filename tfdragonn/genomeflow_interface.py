@@ -5,8 +5,8 @@ from __future__ import print_function
 import numpy as np
 import genomeflow as gf
 
-import datasets
-import models
+from tfdragonn import datasets
+from tfdragonn import models
 
 
 data_type2extractor = {

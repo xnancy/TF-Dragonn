@@ -29,7 +29,7 @@ parser = argparse.ArgumentParser(
     predict         Run prediction on a list of regions
     labelregions    Label a list of regions for training
     ''')
-parser.add_argument('command', help='Subcommand to run')
+parser.add_argument('command', help='Subcommand to run; possible commands: {}'.format(commands_str))
 
 
 def main():

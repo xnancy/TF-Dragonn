@@ -20,19 +20,24 @@ import trainers
 import loggers
 
 
-# tfbinding project specific settings (only used if --tfbinding-project is
-# specified)
+# tfbinding project specific settings (only used if --is-tfbinding-project is
+# specified or 'IS_TFBINDING_PROJECT' is set as an environment variable)
 IS_TFBINDING_PROJECT = False
 TFBINDING_DIR_PREFIX = '/srv/scratch/tfbinding/'
 TFBINDING_LOGDIR_PREFIX = '/srv/scratch/tfbinding/tf_logs/'
 
+# Default holdout and validation chromosome sets
 DEFAULT_HOLDOUT_CHROMS = ['chr1', 'chr8', 'chr21']
 DEFAULT_VALID_CHROMS = ['chr9']
 
+# Default early stopping parameters
 DEFAULT_EARLYSTOPPING_KEY = 'auPRC'
 DEFAULT_EARLYSTOPPING_PATIENCE = 4
 
+# Whether to load datasets in memory before training or read from disk
 IN_MEMORY = False
+
+# Default learning parameters
 DEFAULT_BATCH_SIZE = 256
 DEFAULT_EPOCH_SIZE = 2500000
 DEFAULT_LEARNING_RATE = 0.0003
@@ -69,6 +74,8 @@ class BaseModelRunner(object):
                             required=True, help='Visible GPUs string')
         parser.add_argument('--maxexs', type=int,
                             help='max number of examples', default=None)
+        parser.add_argument('--is-tfbinding-project', action='store_true',
+                            help='Use tf-binding project specific settings')
         cls.add_additional_args(parser)
         return parser
 
@@ -84,16 +91,25 @@ class BaseModelRunner(object):
         return args
 
     def run_from_args(self, command, args):
+        if command != self.command:
+            raise ValueError('Wrong command "{}" for runner "{}". Expecting "{}".'.format(
+                command, self.__class__.__name__, self.command))
         args = self.parse_args(args)
-        self.start_run(command, args)
+        self.start_run(args)
 
-    def start_run(self, command, params):
+    def start_run(self, params):
         """Main entrypoiny for running a model."""
+        if params.is_tfbinding_project or 'IS_TFBINDING_PROJECT' in os.environ:
+            global IS_TFBINDING_PROJECT
+            IS_TFBINDING_PROJECT = True
+            run_id = str(params.logdir.lstrip(TFBINDING_LOGDIR_PREFIX))
+            database.add_run(run_id, params.datasetspec, params.intervalspec,
+                             params.modelspec, params.logdir)
         loggers.add_logdir(self._logger_name, params.logdir)
         self.setup_keras_session(params.visiblegpus)
-        self.run(command, params)
+        self.run(params)
 
-    def run(self, command, params):
+    def run(self, params):
         raise NotImplementedError('Model runners must implement run')
 
     @staticmethod
@@ -133,34 +149,34 @@ class TrainRunner(BaseModelRunner):
     def add_additional_args(cls, parser):
         parser.add_argument('--holdout-chroms',
                             type=json.loads,
-                            help='Test chroms to holdout from training/validation',
+                            help='Set of chroms to holdout entirely from training/validation as a json string, default: "{}"'.format(str(DEFAULT_HOLDOUT_CHROMS)),
                             default=DEFAULT_HOLDOUT_CHROMS)
         parser.add_argument('--valid-chroms',
                             type=json.loads,
-                            help='Validation to holdout from training and use for validation',
+                            help='Set of chroms to holdout from training and use for validation as a json string, default: "{}"'.format(str(DEFAULT_VALID_CHROMS)),
                             default=DEFAULT_HOLDOUT_CHROMS)
         parser.add_argument('--learning-rate',
                             type=float,
-                            help='Learning rate (float)',
+                            help='Learning rate (float), default: {}'.format(DEFAULT_LEARNING_RATE),
                             default=DEFAULT_LEARNING_RATE)
         parser.add_argument('--batch-size',
                             type=int,
-                            help='Batch size (int)',
+                            help='Batch size (int), default: {}'.format(DEFAULT_BATCH_SIZE),
                             default=DEFAULT_BATCH_SIZE)
         parser.add_argument('--epoch-size',
                             type=int,
-                            help='Epoch size (int)',
+                            help='Epoch size (int), default: {}'.format(DEFAULT_EPOCH_SIZE),
                             default=DEFAULT_EPOCH_SIZE)
         parser.add_argument('--early-stopping-metric',
                             type=str,
-                            help='Early stopping metric key',
+                            help='Early stopping metric key, default: {}'.format(DEFAULT_EARLYSTOPPING_KEY),
                             default=DEFAULT_EARLYSTOPPING_KEY)
         parser.add_argument('--early-stopping-patience',
                             type=int,
-                            help='Early stopping patience (int)',
+                            help='Early stopping patience (int), default: {}'.format(DEFAULT_EARLYSTOPPING_PATIENCE),
                             default=DEFAULT_EARLYSTOPPING_PATIENCE)
 
-    def run(self, command, params):
+    def run(self, params):
         data_interface = GenomeFlowInterface(
             params.datasetspec, params.intervalspec, params.modelspec,
             validation_chroms=params.valid_chroms,
@@ -194,7 +210,7 @@ class TrainRunner(BaseModelRunner):
 class TestRunner(BaseModelRunner):
     command = 'test'
 
-    def run(self, command, params):
+    def run(self, params):
         data_interface = GenomeFlowInterface(
             params.datasetspec, params.intervalspec, params.modelspec)
         validation_queue = data_interface.get_validation_queue()
@@ -207,17 +223,5 @@ class TestRunner(BaseModelRunner):
         trainer.test(model, validation_queue, test_size=params.numexs)
 
 
-class PredictRunner(BaseModelRunner):
+class PredictRunner(TestRunner):
     command = 'predict'
-
-    def run(self, command, params):
-        data_interface = GenomeFlowInterface(
-            params.datasetspec, params.intervalspec, params.modelspec)
-        validation_queue = data_interface.get_validation_queue()
-        model = models.model_from_config_and_queue(
-            params.modelspec, validation_queue)
-        model.load_weights(os.path.join(
-            params.logdir, 'model.weights.h5'))
-        trainer = trainers.ClassifierTrainer(
-            task_names=data_interface.task_names)
-        trainer.test(model, validation_queue, test_size=params.numexs)

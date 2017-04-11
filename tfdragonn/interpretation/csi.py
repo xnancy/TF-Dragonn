@@ -1,16 +1,12 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
-import sys
-import os
 import numpy as np
 import time
-from scipy import signal
 import itertools
-from collections import OrderedDict, namedtuple, defaultdict, Counter
+from collections import OrderedDict, namedtuple, defaultdict
 
 import util
-from util import CROSSC_NORMFUNC
 import dragonn.synthetic.fileProcessing as fp
 
 coreDeepLIFTtrackName = 'coreDeepLIFTtrack'
@@ -18,7 +14,7 @@ coreDeepLIFTtrackName = 'coreDeepLIFTtrack'
 
 def identifyPeaks(arr):
     # use a state machine to identify peaks
-    #"peaks" as defined by larger than neighbours
+    # "peaks" as defined by larger than neighbours
     # for tied region, take the middle of the tie.
     # return tuples of idx + peak val
     previousVal = None

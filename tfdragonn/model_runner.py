@@ -14,10 +14,11 @@ from keras import backend as K
 import tensorflow as tf
 
 from tfdragonn import database
-from tfdragonn.genomeflow_interface import GenomeFlowInterface
 from tfdragonn import models
 from tfdragonn import trainers
 from tfdragonn import loggers
+
+from .genomeflow_interface import GenomeFlowInterface
 
 
 # tf-binding project specific settings (only used if --is-tfbinding-project is

@@ -8,14 +8,14 @@ import argparse
 import sys
 
 import tfdragonn.model_runner
-import tfdragonn.preprocessing
+import tfdragonn.preprocessing.preprocess
 
 
 command_functions = {
     'train': tfdragonn.model_runner.TrainRunner().run_from_args,
     'test': tfdragonn.model_runner.TestRunner().run_from_args,
     'predict': tfdragonn.model_runner.PredictRunner().run_from_args,  # TODO: make a predict module
-    'labelregions': tfdragonn.preprocessing.preprocess.label_regions,
+    'labelregions': tfdragonn.preprocessing.preprocess.run_label_regions_from_args,
 }
 commands_str = ', '.join(command_functions.keys())
 

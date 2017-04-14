@@ -106,6 +106,8 @@ class BaseModelRunner(object):
             run_id = str(params.logdir.lstrip(TFBINDING_LOGDIR_PREFIX))
             database.add_run(run_id, params.datasetspec, params.intervalspec,
                              params.modelspec, params.logdir)
+        self.validate_paths(params)
+        os.makedirs(params.logdir)
         loggers.add_logdir(self._logger_name, params.logdir)
         self.setup_keras_session(params.visiblegpus)
         self.run(params)
@@ -192,7 +194,8 @@ class TrainRunner(BaseModelRunner):
                                              epoch_size=params.epoch_size,
                                              num_epochs=100,
                                              early_stopping_metric=params.early_stopping_metric,
-                                             early_stopping_patience=params.early_stopping_patience)
+                                             early_stopping_patience=params.early_stopping_patience,
+                                             logger=self._logger)
 
         model = models.model_from_minimal_config(
             params.modelspec, train_queue.output_shapes, len(data_interface.task_names))

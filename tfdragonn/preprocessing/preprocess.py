@@ -96,4 +96,4 @@ def label_regions(raw_intervals_config_file, prefix,
         processed_intervals_config_file, "w"), indent=4)
     _logger.info("Wrote new data config file to {}.".format(
         processed_intervals_config_file))
-    _logger.info("Done!"
+    _logger.info("Done!")

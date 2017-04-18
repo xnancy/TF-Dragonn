@@ -221,7 +221,7 @@ class TestRunner(BaseModelRunner):
             params.logdir, 'model.weights.h5'))
         trainer = trainers.ClassifierTrainer(
             task_names=data_interface.task_names)
-        trainer.test(model, validation_queue, test_size=params.numexs)
+        trainer.test(model, validation_queue, test_size=params.maxexs)
 
 
 class PredictRunner(TestRunner):

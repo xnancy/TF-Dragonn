@@ -20,10 +20,11 @@ _logger = loggers.get_logger(LOGGER_NAME)
 
 
 def parse_args(args):
-    parser = argparse.ArgumentParser('Generate fixed length regions and their'
+    parser = argparse.ArgumentParser('tfdragonn labelregions',
+                                     description='Generate fixed length regions and their'
                                      ' labels for each dataset.',
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('raw_intervals_config_file', type=str,
+    parser.add_argument('raw_intervals_config_file', type=os.path.abspath,
                         help='Includes task names and a map from dataset id -> raw interval file')
     parser.add_argument('prefix', type=str, help='prefix of output files')
     parser.add_argument('--n-jobs', type=int, default=1,
@@ -38,8 +39,8 @@ def parse_args(args):
                         help='Genome name.\nDefault: hg19.'
                         '\nOptions: hg18, hg38, mm9, mm10, dm3, dm6.')
     parser.add_argument('--logdir', type=os.path.abspath,
-                        help='Logging directory', default=None)
-    args = parser.parse_args()
+                        help='Logging directory', default=None, required=False)
+    args = parser.parse_args(args)
     return args
 
 
@@ -95,4 +96,4 @@ def label_regions(raw_intervals_config_file, prefix,
         processed_intervals_config_file, "w"), indent=4)
     _logger.info("Wrote new data config file to {}.".format(
         processed_intervals_config_file))
-    _logger.info("Done!")
+    _logger.info("Done!"

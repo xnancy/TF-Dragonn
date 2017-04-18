@@ -9,6 +9,7 @@ import collections
 import json
 import os
 import numpy as np
+import sklearn
 
 from tfdragonn import loggers
 from .raw_datasets import parse_raw_intervals_config_file
@@ -83,7 +84,7 @@ def label_regions(raw_intervals_config_file, prefix,
             intervals_file_array[:, :3] = intervals.to_dataframe().as_matrix()[
                 :, :3]
             intervals_file_array[:, 3:] = labels
-            # np.save(path_to_dataset_intervals_file, intervals_file_array)
+            intervals_file_array = sklearn.utils.shuffle(intervals_file_array)
             np.savetxt(path_to_dataset_intervals_file,
                        intervals_file_array, delimiter='\t', fmt='%s')
             _logger.info("Saved intervals_file file to {}".format(

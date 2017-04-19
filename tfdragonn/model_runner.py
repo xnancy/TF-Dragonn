@@ -181,7 +181,7 @@ class TrainRunner(BaseModelRunner):
 
     def run(self, params):
         data_interface = GenomeFlowInterface(
-            params.datasetspec, params.intervalspec, params.modelspec,
+            params.datasetspec, params.intervalspec, params.modelspec, params.logdir,
             validation_chroms=params.valid_chroms,
             holdout_chroms=params.holdout_chroms)
         train_queue = data_interface.get_train_queue()
@@ -216,7 +216,7 @@ class TestRunner(BaseModelRunner):
 
     def run(self, params):
         data_interface = GenomeFlowInterface(
-            params.datasetspec, params.intervalspec, params.modelspec)
+            params.datasetspec, params.intervalspec, params.modelspec, params.logdir)
         validation_queue = data_interface.get_validation_queue()
         model = models.model_from_config_and_queue(
             params.modelspec, validation_queue)

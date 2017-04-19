@@ -2,11 +2,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+
 import numpy as np
 import genomeflow as gf
 
 from tfdragonn import datasets
 from tfdragonn import models
+
+from genomeflow.io.streams import BedFileStream
 
 
 data_type2extractor = {
@@ -42,12 +46,13 @@ data_type2options = {
 
 class GenomeFlowInterface(object):
 
-    def __init__(self, datasetspec, intervalspec, modelspec,
+    def __init__(self, datasetspec, intervalspec, modelspec, logdir,
                  shuffle=True, pos_sampling_rate=0.05,
                  validation_chroms=None, holdout_chroms=None):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
         self.modelspec = modelspec
+        self.logdir = logdir
         input_names = models.model_inputs_from_config(modelspec)
         self.input_names = [input_name.split('/')[1]
                             for input_name in input_names]
@@ -100,10 +105,20 @@ class GenomeFlowInterface(object):
                     else:  # contains at least one positive label
                         return np.random.uniform() < pos_sampling_rate
 
+        dest_file = os.path.join(self.logdir, os.path.basename(intervals_file))
+        while os.path.isfile(dest_file):
+            dest_file += str(np.random.randint(low=0, high=10))
+
+        source_stream = BedFileStream(intervals_file, num_epochs=1, sampling_fn=sampling_fn)
+        with open(dest_file, 'w') as dest_fp:
+            entry = source_stream.read_entry()
+            line = '\t'.join(map(entry.get, ['chrom', 'start', 'end']))
+            if 'labels' in entry:
+                line += '\t' + '\t'.join(entry['labels'].tolist())
+            dest_fp.write(line + '\n')
+
         interval_queue = gf.io.StreamingIntervalQueue(
-            intervals_file,
-            selected_chroms=selected_chroms,
-            holdout_chroms=holdout_chroms,
+            dest_file,
             read_batch_size=read_batch_size,
             name='{}-interval-queue'.format(dataset_id),
             num_epochs=num_epochs,

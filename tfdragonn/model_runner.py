@@ -107,7 +107,8 @@ class BaseModelRunner(object):
             database.add_run(run_id, params.datasetspec, params.intervalspec,
                              params.modelspec, params.logdir)
         self.validate_paths(params)
-        os.makedirs(params.logdir)
+        if self.command == 'train':
+            os.makedirs(params.logdir)
         loggers.add_logdir(self._logger_name, params.logdir)
         self.setup_keras_session(params.visiblegpus)
         self.run(params)
@@ -218,13 +219,21 @@ class TestRunner(BaseModelRunner):
         data_interface = GenomeFlowInterface(
             params.datasetspec, params.intervalspec, params.modelspec, params.logdir)
         validation_queue = data_interface.get_validation_queue()
-        model = models.model_from_config_and_queue(
-            params.modelspec, validation_queue)
+        model = models.model_from_minimal_config(
+            params.modelspec, validation_queue.output_shapes, len(data_interface.task_names))
         model.load_weights(os.path.join(
             params.logdir, 'model.weights.h5'))
         trainer = trainers.ClassifierTrainer(
             task_names=data_interface.task_names)
         trainer.test(model, validation_queue, test_size=params.maxexs)
+
+    @classmethod
+    def validate_paths(cls, params):
+        for specfile in [params.datasetspec, params.intervalspec, params.modelspec]:
+            cls.validate_specfile(specfile)
+        assert(os.path.exists(params.logdir))
+        if IS_TFBINDING_PROJECT:
+            assert(params.logdir.startswith(TFBINDING_LOGDIR_PREFIX))
 
 
 class PredictRunner(TestRunner):

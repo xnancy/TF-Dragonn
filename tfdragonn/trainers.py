@@ -70,62 +70,57 @@ class ClassifierTrainer(object):
         def get_rss_prop():  # this is quite expensive
             return (process.memory_info().rss - process.memory_info().shared) / 10**6
 
-        train_iterator = None
-        try:
-            train_iterator = gf_io_utils.ExampleQueueIterator(
-                train_queue, num_exs_batch=self.batch_size,
-                num_epochs=self.num_epochs, num_exs_epoch=self.epoch_size)
+        # train_iterator = None
 
-            valid_metrics = []
-            best_metric = np.inf if self.early_stopping_metric == 'Loss' else -np.inf
-            batches_per_epoch = int(
-                np.floor(self.epoch_size / self.batch_size))
-            samples_per_epoch = self.batch_size * batches_per_epoch
+        train_iterator = gf_io_utils.ExampleQueueIterator(
+            train_queue, num_exs_batch=self.batch_size,
+            num_epochs=self.num_epochs, num_exs_epoch=self.epoch_size)
 
-            for epoch in six.moves.range(1, self.num_epochs + 1):
-                progbar = Progbar(target=samples_per_epoch)
-                rss_minus_shr_memory = get_rss_prop()
+        valid_metrics = []
+        best_metric = np.inf if self.early_stopping_metric == 'Loss' else -np.inf
+        batches_per_epoch = int(
+            np.floor(self.epoch_size / self.batch_size))
+        samples_per_epoch = self.batch_size * batches_per_epoch
 
-                for batch_indxs in six.moves.range(1, batches_per_epoch + 1):
-                    batch = train_iterator.next()
-                    batch_loss = model.model.train_on_batch(
-                        batch, batch['labels'])
+        for epoch in six.moves.range(1, self.num_epochs + 1):
+            progbar = Progbar(target=samples_per_epoch)
+            rss_minus_shr_memory = get_rss_prop()
 
-                    if batch_indxs % BATCH_FREQ_UPDATE_MEM_USAGE == 0:
-                        rss_minus_shr_memory = get_rss_prop()
+            for batch_indxs in six.moves.range(1, batches_per_epoch + 1):
+                batch = train_iterator.next()
+                batch_loss = model.model.train_on_batch(
+                    batch, batch['labels'])
 
-                    if batch_indxs % BATCH_FREQ_UPDATE_PROGBAR == 0:
-                        progbar.update(batch_indxs * self.batch_size,
-                                       values=[("loss", batch_loss),
-                                               ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+                if batch_indxs % BATCH_FREQ_UPDATE_MEM_USAGE == 0:
+                    rss_minus_shr_memory = get_rss_prop()
 
-                epoch_valid_metrics = self.test(model, valid_queue)
-                valid_metrics.append(epoch_valid_metrics)
+                if batch_indxs % BATCH_FREQ_UPDATE_PROGBAR == 0:
+                    progbar.update(batch_indxs * self.batch_size,
+                                   values=[("loss", batch_loss),
+                                           ("Non-shared RSS (Mb)", rss_minus_shr_memory)])
+
+            epoch_valid_metrics = self.test(model, valid_queue)
+            valid_metrics.append(epoch_valid_metrics)
+            if verbose:
+                self.logger.info('\nEpoch {}:'.format(epoch))
+                self.logger.info('Metrics across all datasets:\n{}\n'.format(
+                    epoch_valid_metrics))
+            current_metric = epoch_valid_metrics[
+                self.early_stopping_metric].mean()
+            if (self.early_stopping_metric == 'Loss') == (current_metric <= best_metric):
                 if verbose:
-                    self.logger.info('\nEpoch {}:'.format(epoch))
-                    self.logger.info('Metrics across all datasets:\n{}\n'.format(
-                        epoch_valid_metrics))
-                current_metric = epoch_valid_metrics[
-                    self.early_stopping_metric].mean()
-                if (self.early_stopping_metric == 'Loss') == (current_metric <= best_metric):
-                    if verbose:
-                        self.logger.info('New best {}. Saving model.\n'.format(
-                            self.early_stopping_metric))
-                    best_metric = current_metric
-                    best_epoch = epoch
-                    early_stopping_wait = 0
-                    if save_best_model_to_prefix is not None:
-                        model.save(save_best_model_to_prefix)
-                else:
-                    if early_stopping_wait >= self.early_stopping_patience:
-                        break
-                    early_stopping_wait += 1
-            train_iterator.close()
-
-        except Exception as e:
-            if train_iterator is not None:
-                train_iterator.close()
-            raise e
+                    self.logger.info('New best {}. Saving model.\n'.format(
+                        self.early_stopping_metric))
+                best_metric = current_metric
+                best_epoch = epoch
+                early_stopping_wait = 0
+                if save_best_model_to_prefix is not None:
+                    model.save(save_best_model_to_prefix)
+            else:
+                if early_stopping_wait >= self.early_stopping_patience:
+                    break
+                early_stopping_wait += 1
+        train_iterator.close()
 
         if verbose:  # end of training messages
             self.logger.info(

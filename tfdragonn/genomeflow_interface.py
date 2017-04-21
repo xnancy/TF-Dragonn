@@ -64,6 +64,7 @@ class GenomeFlowInterface(object):
         self.dataset = datasets.parse_inputs_and_intervals(
             datasetspec, intervalspec)
         self.task_names = self.dataset.values()[0]['task_names']
+        self.tmp_files = []
 
     def get_train_queue(self):
         skip_chroms = []
@@ -91,7 +92,7 @@ class GenomeFlowInterface(object):
 
     def get_interval_queue(self, dataset, dataset_id, selected_chroms=None,
                            holdout_chroms=None, num_epochs=None,
-                           read_batch_size=1, shuffle=True, pos_sampling_rate=None):
+                           read_batch_size=10000, shuffle=True, pos_sampling_rate=None):
         intervals_file = dataset['intervals_file']
 
         sampling_fn = None
@@ -109,17 +110,21 @@ class GenomeFlowInterface(object):
         dest_file = os.path.join(self.logdir, os.path.basename(intervals_file))
         while os.path.isfile(dest_file):
             dest_file += str(np.random.randint(low=0, high=10))
+        self.tmp_files.append(dest_file)
 
-        source_stream = BedFileStream(intervals_file, num_epochs=1, sampling_fn=sampling_fn)
+        source_stream = BedFileStream(
+            intervals_file, num_epochs=1, sampling_fn=sampling_fn)
         with open(dest_file, 'w') as dest_fp:
             while True:
                 try:
                     entry = source_stream.read_entry()
                 except tf.errors.OutOfRangeError as e:
                     break
-                line = '\t'.join(map(str, map(entry.get, ['chrom', 'start', 'end'])))
+                line = '\t'.join(
+                    map(str, map(entry.get, ['chrom', 'start', 'end'])))
                 if 'labels' in entry:
-                    line += '\t' + '\t'.join([str(i) for i in entry['labels'].tolist()])
+                    line += '\t' + '\t'.join([str(i)
+                                              for i in entry['labels'].tolist()])
                 dest_fp.write(line + '\n')
 
         interval_queue = gf.io.StreamingIntervalQueue(
@@ -155,8 +160,7 @@ class GenomeFlowInterface(object):
                           num_epochs=None, pos_sampling_rate=None,
                           input_names=None, shuffle=False, enqueues_per_thread=[128]):
         interval_queue = self.get_interval_queue(
-            dataset, dataset_id, num_epochs=num_epochs,
-            read_batch_size=1, shuffle=shuffle)
+            dataset, dataset_id, num_epochs=num_epochs, shuffle=shuffle)
         inputs = dataset['inputs']
         if input_names is not None:  # use only these inputs in the example queue
             assert all([input_name in inputs.keys()
@@ -194,6 +198,14 @@ class GenomeFlowInterface(object):
             options = data_type2options[data_type].copy()
             options.update(data_specs['options'])
         return gf.io.DataSource(data_path, extractor_type, options)
+
+    def cleanup_tmp_files(self):
+        for fpath in self.tmp_files:
+            if os.path.exists(fpath):
+                os.system('rm -f {}'.format(fpath))
+
+    def __del__(self):
+        self.cleanup_tmp_files()
 
     @property
     def normalized_class_rates(self):

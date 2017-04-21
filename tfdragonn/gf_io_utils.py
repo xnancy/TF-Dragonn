@@ -31,7 +31,7 @@ class ExampleQueueIterator(object):
         session.run(tf.global_variables_initializer())
         session.run(tf.local_variables_initializer())
 
-        print "*****START QUEUE RUNNERS*****"
+        print("*****START QUEUE RUNNERS*****")
         self._coord = coordinator.Coordinator()
         self._queue_runner_threads = tf.train.start_queue_runners(session, self._coord)
 
@@ -81,3 +81,4 @@ class ExampleQueueIterator(object):
         sess = getattr(self, "_session", None)
         if sess is not None:
             sess.close()
+        del sess

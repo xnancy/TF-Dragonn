@@ -39,7 +39,6 @@ def recall_at_precision_threshold(labels, predictions, precision_threshold):
 class ClassificationResult(object):
 
     def __init__(self, labels, predictions, task_names=None):
-        assert labels.dtype == int
         self.results = []
         non_ambig_task_names = []
         for i, (task_labels, task_predictions) in enumerate(zip(labels.T, predictions.T)):

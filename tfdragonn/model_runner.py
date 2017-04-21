@@ -225,7 +225,8 @@ class TestRunner(BaseModelRunner):
             params.logdir, 'model.weights.h5'))
         trainer = trainers.ClassifierTrainer(
             task_names=data_interface.task_names)
-        trainer.test(model, validation_queue, test_size=params.maxexs)
+        classification_result = trainer.test(model, validation_queue, test_size=params.maxexs)
+        self._logger.info('\n{}'.format(classification_result))
 
     @classmethod
     def validate_paths(cls, params):

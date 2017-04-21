@@ -117,9 +117,9 @@ class GenomeFlowInterface(object):
                     entry = source_stream.read_entry()
                 except tf.errors.OutOfRangeError as e:
                     break
-                line = '\t'.join(map(entry.get, ['chrom', 'start', 'end']))
+                line = '\t'.join(map(str, map(entry.get, ['chrom', 'start', 'end'])))
                 if 'labels' in entry:
-                    line += '\t' + '\t'.join(entry['labels'].tolist())
+                    line += '\t' + '\t'.join([str(i) for i in entry['labels'].tolist()])
                 dest_fp.write(line + '\n')
 
         interval_queue = gf.io.StreamingIntervalQueue(
@@ -127,7 +127,6 @@ class GenomeFlowInterface(object):
             read_batch_size=read_batch_size,
             name='{}-interval-queue'.format(dataset_id),
             num_epochs=num_epochs,
-            sampling_fn=sampling_fn,
             capacity=50000,
             shuffle=shuffle,
             min_after_dequeue=40000,

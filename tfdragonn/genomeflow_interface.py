@@ -6,6 +6,7 @@ import os
 
 import numpy as np
 import genomeflow as gf
+import tensorflow as tf
 
 from tfdragonn import datasets
 from tfdragonn import models
@@ -111,11 +112,15 @@ class GenomeFlowInterface(object):
 
         source_stream = BedFileStream(intervals_file, num_epochs=1, sampling_fn=sampling_fn)
         with open(dest_file, 'w') as dest_fp:
-            entry = source_stream.read_entry()
-            line = '\t'.join(map(entry.get, ['chrom', 'start', 'end']))
-            if 'labels' in entry:
-                line += '\t' + '\t'.join(entry['labels'].tolist())
-            dest_fp.write(line + '\n')
+            while True:
+                try:
+                    entry = source_stream.read_entry()
+                except tf.errors.OutOfRangeError as e:
+                    break
+                line = '\t'.join(map(entry.get, ['chrom', 'start', 'end']))
+                if 'labels' in entry:
+                    line += '\t' + '\t'.join(entry['labels'].tolist())
+                dest_fp.write(line + '\n')
 
         interval_queue = gf.io.StreamingIntervalQueue(
             dest_file,

@@ -129,6 +129,8 @@ class GenomeFlowInterface(object):
 
         interval_queue = gf.io.StreamingIntervalQueue(
             dest_file,
+            holdout_chroms=holdout_chroms,
+            selected_chroms=selected_chroms,
             read_batch_size=read_batch_size,
             name='{}-interval-queue'.format(dataset_id),
             num_epochs=num_epochs,
@@ -144,6 +146,8 @@ class GenomeFlowInterface(object):
                   enqueues_per_thread=[128]):
         examples_queues = {
             dataset_id: self.get_example_queue(dataset_values, dataset_id,
+                                               holdout_chroms=holdout_chroms,
+                                               selected_chroms=selected_chroms,
                                                num_epochs=num_epochs,
                                                pos_sampling_rate=pos_sampling_rate,
                                                input_names=input_names,

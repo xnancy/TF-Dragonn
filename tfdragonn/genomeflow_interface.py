@@ -151,11 +151,12 @@ class GenomeFlowInterface(object):
             enqueues_per_thread=enqueues_per_thread)
         return shared_examples_queue
 
-    def get_example_queue(self, dataset, dataset_id,
-                          num_epochs=None, pos_sampling_rate=None,
+    def get_example_queue(self, dataset, dataset_id, selected_chroms=None,
+                          holdout_chroms=None, num_epochs=None, pos_sampling_rate=None,
                           input_names=None, shuffle=False, enqueues_per_thread=[128]):
         interval_queue = self.get_interval_queue(
-            dataset, dataset_id, num_epochs=num_epochs,
+            dataset, dataset_id, selected_chrom=selected_chrom,
+            holdout_chroms=holdout_chroms, num_epochs=num_epochs,
             read_batch_size=1, shuffle=shuffle)
         inputs = dataset['inputs']
         if input_names is not None:  # use only these inputs in the example queue

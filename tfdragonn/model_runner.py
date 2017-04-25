@@ -159,7 +159,7 @@ class TrainRunner(BaseModelRunner):
         parser.add_argument('--valid-chroms',
                             type=json.loads,
                             help='Set of chroms to holdout from training and use for validation as a json string, default: "{}"'.format(str(DEFAULT_VALID_CHROMS)),
-                            default=DEFAULT_HOLDOUT_CHROMS)
+                            default=DEFAULT_VALID_CHROMS)
         parser.add_argument('--learning-rate',
                             type=float,
                             help='Learning rate (float), default: {}'.format(DEFAULT_LEARNING_RATE),

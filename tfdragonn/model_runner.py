@@ -104,8 +104,9 @@ class BaseModelRunner(object):
             global IS_TFBINDING_PROJECT
             IS_TFBINDING_PROJECT = True
             run_id = str(params.logdir.lstrip(TFBINDING_LOGDIR_PREFIX))
-            database.add_run(run_id, params.datasetspec, params.intervalspec,
-                             params.modelspec, params.logdir)
+            if self.command == 'train':
+                database.add_run(run_id, params.datasetspec, params.intervalspec,
+                                 params.modelspec, params.logdir)
         self.validate_paths(params)
         if self.command == 'train':
             os.makedirs(params.logdir)

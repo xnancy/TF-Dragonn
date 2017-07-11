@@ -111,3 +111,46 @@ Next, we map these predictions into the DREAM format of chromosome-wide predicti
 tfdragonn map_predictions --predictions-config-file examples/dream_challenge/myc_predictions_on_HepG2_relaxed_dnase_peaks.json --target-regions examples/dream_challenge/ladder_regions.blacklistfiltered.bed.gz --stride 50 --prefix examples/dream_challenge/
 ```
 Mapping of predictions follows the same approach as in `tfdragonn evaluate`, where target regions outside the predicted regions get probabilities of 0. The output file from this command `examples/dream_challenge/L.MYC.HepG2.tab` can be gzipped and submitted directly to the DREAM challenge.
+
+
+# Tensorflow interface usage
+Overview:
+```
+usage: tfdragonn_tf [-h] {extract,label_regions} ...
+
+TensorFlow DragoNN (TF-DragoNN) sub-commands include:
+
+positional arguments:
+  {extract,label_regions}
+                        tf-dragonn command help
+    extract             This command extracts encoded data from raw data files
+			in the data config file for use with streaming models,
+			and writes a new data config with memmaped inputs.
+    label_regions       Generates fixed length regions and their labels for
+			each dataset.Writes a new data config file with
+			regions and labels files.
+
+optional arguments:
+  -h, --help            show this help message and exit
+```
+## Input data extraction
+Overview:
+```
+usage: tfdragonn_tf extract [-h] --extract-dir EXTRACT_DIR
+                            --raw-inputs-config-file RAW_INPUTS_CONFIG_FILE
+			    --processed-inputs-config-file PROCESSED_INPUTS_CONFIG_FILE
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --extract-dir EXTRACT_DIR
+                        directories with extracted data are created in this
+			directory.
+  --raw-inputs-config-file RAW_INPUTS_CONFIG_FILE
+		        Raw input configuration file.
+  --processed-inputs-config-file PROCESSED_INPUTS_CONFIG_FILE
+			Processed input configuration file to write.
+```
+Run this from the tensorflow subdirectory to process all the data in the TF binding challenge:
+```
+tfdragonn_tf extract --raw-inputs-config-file examples/raw_inputs_large_example.json --extract-dir /mnt/data/memmap/bcolz_data/ --processed-inputs-config-file examples/processed_inputs_large_example.json
+```

@@ -1,4 +1,9 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
+
 
 def _kmeanspp(dist, k):
     num_points = dist.shape[0]
@@ -16,6 +21,7 @@ def _kmeanspp(dist, k):
 
     return centers
 
+
 def kmedoids(dist, n_clusters, n_init=5, max_iter=300, init='kmeans++',
              random_search_tries=3):
     best_cost = np.inf
@@ -29,11 +35,13 @@ def kmedoids(dist, n_clusters, n_init=5, max_iter=300, init='kmeans++',
 
     return best_vals
 
+
 def _reassign_clusters(dist, medoids):
     num_points = dist.shape[0]
     cluster_idx = np.argmin(dist[:, medoids], axis=1)
     cost = dist[np.arange(num_points), medoids[cluster_idx]].sum()
     return cluster_idx, cost
+
 
 def _kmedoids(dist, k, max_iter, init, num_tries=3,
               max_iters_without_improvement=1):

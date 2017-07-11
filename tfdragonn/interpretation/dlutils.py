@@ -1,12 +1,13 @@
-from collections import OrderedDict
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from itertools import groupby
 from itertools import izip
 import logging
-import os
 import subprocess
 
 import numpy as np
-from scipy.io import loadmat
 
 from pybedtools import BedTool
 from pybedtools import Interval
@@ -33,11 +34,12 @@ logger.propagate = False
 # Magic numbers and constants here (that are not in args)
 BLOB_DIMS = 4
 
+
 def expand_dims_blob(arr, target_num_axes=BLOB_DIMS):
     # Reshapes arr, adds dims after the first axis
     assert len(arr.shape) <= BLOB_DIMS
     extra_dims = target_num_axes - len(arr.shape)
-    new_shape = (arr.shape[0],) + (1,)*extra_dims + tuple(arr.shape[1:])
+    new_shape = (arr.shape[0],) + (1,) * extra_dims + tuple(arr.shape[1:])
     return arr.reshape(new_shape)
 
 
@@ -128,7 +130,7 @@ def merged_scores(scores, intervals, merge_type):
             yield Interval(group_chrom, group_start, group_stop), group_score
 
 
-def _write_1D_deeplift_track(scores, intervals, file_prefix, merge_type=None, 
+def _write_1D_deeplift_track(scores, intervals, file_prefix, merge_type=None,
                              CHROM_SIZES='/mnt/data/annotations/by_release/hg19.GRCh37/hg19.chrom.sizes'):
     assert scores.ndim == 2
 

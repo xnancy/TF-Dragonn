@@ -17,7 +17,6 @@ from tfdragonn import gf_io_utils
 BATCH_FREQ_UPDATE_MEM_USAGE = 100
 BATCH_FREQ_UPDATE_PROGBAR = 50
 
-
 def build_masked_loss(loss_function, mask_value=AMBIG_LABEL):
     def binary_crossentropy(y_true, y_pred):
         mask = K.cast(K.not_equal(y_true, mask_value), K.floatx())
@@ -81,7 +80,6 @@ class ClassifierTrainer(object):
         batches_per_epoch = int(
             np.floor(self.epoch_size / self.batch_size))
         samples_per_epoch = self.batch_size * batches_per_epoch
-
         for epoch in six.moves.range(1, self.num_epochs + 1):
             progbar = Progbar(target=samples_per_epoch)
             rss_minus_shr_memory = get_rss_prop()
@@ -166,7 +164,6 @@ class ClassifierTrainer(object):
                     if batch_indx % BATCH_FREQ_UPDATE_PROGBAR == 0:
                         progbar.update(batch_indx * batch_size,
                                        values=[("Non-shared RSS (Mb)", rss_minus_shr_memory)])
-
             iterator.close()
             del iterator
 

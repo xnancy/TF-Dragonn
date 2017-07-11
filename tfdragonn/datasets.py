@@ -49,7 +49,6 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
 
         if cur_dataset_id == 'task_names':
             continue
-
         dataset[cur_dataset_id] = {
             'task_names': task_names,
             'inputs': inputs_files[cur_dataset_id],

@@ -18,7 +18,6 @@ from keras.models import Model
 
 from tfdragonn import pwms
 
-
 def model_from_config(model_config_file_path):
     """Load a model from a json config file."""
     thismodule = sys.modules[__name__]
@@ -55,7 +54,6 @@ def model_from_minimal_config(model_config_file_path, shapes, num_tasks):
     with open(model_config_file_path, 'r') as fp:
         config = json.load(fp)
     model_class_name = config['model_class']
-
     model_class = getattr(thismodule, model_class_name)
     del config['model_class']
     return model_class(shapes, num_tasks, **config)

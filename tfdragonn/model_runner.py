@@ -182,6 +182,13 @@ class TrainRunner(BaseModelRunner):
                             default=DEFAULT_EARLYSTOPPING_PATIENCE)
 
     def run(self, params):
+        shutil.copyfile(params.datasetspec, os.path.join(
+            params.logdir, ntpath.basename('datasetspec.json')))
+        shutil.copyfile(params.intervalspec, os.path.join(
+            params.logdir, ntpath.basename('intervalspec.json')))
+        shutil.copyfile(params.modelspec, os.path.join(
+            params.logdir, ntpath.basename('modelspec.json')))
+
         data_interface = GenomeFlowInterface(
             params.datasetspec, params.intervalspec, params.modelspec, params.logdir,
             validation_chroms=params.valid_chroms,
@@ -205,12 +212,6 @@ class TrainRunner(BaseModelRunner):
         trainer.train(model, train_queue, validation_queue,
                       save_best_model_to_prefix=os.path.join(params.logdir, "model"))
 
-        shutil.copyfile(params.datasetspec, os.path.join(
-            params.logdir, ntpath.basename('datasetspec.json')))
-        shutil.copyfile(params.intervalspec, os.path.join(
-            params.logdir, ntpath.basename('intervalspec.json')))
-        shutil.copyfile(params.modelspec, os.path.join(
-            params.logdir, ntpath.basename('modelspec.json')))
 
 
 class TestRunner(BaseModelRunner):

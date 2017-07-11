@@ -13,7 +13,6 @@ from tfdragonn import models
 
 from genomeflow.io.streams import BedFileStream
 
-
 data_type2extractor = {
     'genome_data_dir': 'bcolz_array',
     'dnase_data_dir': 'bcolz_array',
@@ -94,51 +93,124 @@ class GenomeFlowInterface(object):
                            holdout_chroms=None, num_epochs=None,
                            read_batch_size=10000, shuffle=True, pos_sampling_rate=None):
         intervals_file = dataset['intervals_file']
-
-        sampling_fn = None
         if pos_sampling_rate is not None:
-            def sampling_fn(record):
-                labels = record[-1]
-                if len(labels) == 0:
-                    return True
-                else:
-                    if 1 not in labels:  # all negative or ambiguous
-                        return True
-                    else:  # contains at least one positive label
-                        return np.random.uniform() < pos_sampling_rate
+            def pos_sampling_fn(record):
+                # single task only
+                return np.array(record[-1], dtype=np.int32)[0] > 0
 
-        dest_file = os.path.join(self.logdir, os.path.basename(intervals_file))
-        while os.path.isfile(dest_file):
-            dest_file += str(np.random.randint(low=0, high=10))
-        self.tmp_files.append(dest_file)
+            def neg_sampling_fn(record):
+                return np.array(record[-1], dtype=np.int32)[0] < 1
+            pos_only_stream = BedFileStream(
+                intervals_file,
+                selected_chroms=selected_chroms,
+                holdout_chroms=holdout_chroms,
+                num_epochs=1,
+                sampling_fn=pos_sampling_fn)
+            neg_only_stream = BedFileStream(
+                intervals_file,
+                selected_chroms=selected_chroms,
+                holdout_chroms=holdout_chroms,
+                num_epochs=1,
+                sampling_fn=neg_sampling_fn)
+            neg_dest_file = os.path.join(
+                self.logdir, os.path.basename(intervals_file) + 'neg')
+            pos_dest_file = os.path.join(
+                self.logdir, os.path.basename(intervals_file) + 'pos')
+            while os.path.isfile(neg_dest_file):
+                neg_dest_file += str(np.random.randint(low=0, high=10))
+            while os.path.isfile(pos_dest_file):
+                pos_dest_file += str(np.random.randint(low=0, high=10))
+            self.tmp_files += [neg_dest_file, pos_dest_file]
+            # pos queue
+            with open(pos_dest_file, 'w') as pos_dest_fp:
+                while True:
+                    try:
+                        entry = pos_only_stream.read_entry()
+                    except tf.errors.OutOfRangeError as e:
+                        break
+                    if entry['chrom'] in holdout_chroms:
+                        raise ValueError('Chromosome cannot be in holdout chromosomes')
+                    line = '\t'.join(
+                        map(str, map(entry.get, ['chrom', 'start', 'end'])))
+                    if 'labels' in entry:
+                        line += '\t' + '\t'.join([str(i)
+                                                  for i in entry['labels'].tolist()])
+                    pos_dest_fp.write(line + '\n')
 
-        source_stream = BedFileStream(
-            intervals_file, num_epochs=1, sampling_fn=sampling_fn)
-        with open(dest_file, 'w') as dest_fp:
-            while True:
-                try:
-                    entry = source_stream.read_entry()
-                except tf.errors.OutOfRangeError as e:
-                    break
-                line = '\t'.join(
-                    map(str, map(entry.get, ['chrom', 'start', 'end'])))
-                if 'labels' in entry:
-                    line += '\t' + '\t'.join([str(i)
-                                              for i in entry['labels'].tolist()])
-                dest_fp.write(line + '\n')
+            pos_interval_queue = gf.io.StreamingIntervalQueue(
+                pos_dest_file,
+                read_batch_size=read_batch_size,
+                name='{}-pos-interval-queue'.format(dataset_id),
+                num_epochs=num_epochs,
+                capacity=50000,
+                shuffle=shuffle,
+                min_after_dequeue=40000,
+                summary=True)
 
-        interval_queue = gf.io.StreamingIntervalQueue(
-            dest_file,
-            holdout_chroms=holdout_chroms,
-            selected_chroms=selected_chroms,
-            read_batch_size=read_batch_size,
-            name='{}-interval-queue'.format(dataset_id),
-            num_epochs=num_epochs,
-            capacity=50000,
-            shuffle=shuffle,
-            min_after_dequeue=40000,
-            summary=True)
-        return interval_queue
+            # neg only queue
+            with open(neg_dest_file, 'w') as neg_dest_fp:
+                while True:
+                    try:
+                        entry = neg_only_stream.read_entry()
+                    except tf.errors.OutOfRangeError as e:
+                        break
+                    if entry['chrom'] in holdout_chroms:
+                        raise ValueError('Chromosome cannot be in holdout chromosomes')
+                    line = '\t'.join(
+                        map(str, map(entry.get, ['chrom', 'start', 'end'])))
+                    if 'labels' in entry:
+                        line += '\t' + '\t'.join([str(i)
+                                                  for i in entry['labels'].tolist()])
+                        neg_dest_fp.write(line + '\n')
+            neg_interval_queue = gf.io.StreamingIntervalQueue(
+                neg_dest_file,
+                read_batch_size=read_batch_size,
+                name='{}-neg-interval-queue'.format(dataset_id),
+                num_epochs=num_epochs,
+                capacity=50000,
+                shuffle=shuffle,
+                min_after_dequeue=40000,
+                summary=True)
+            interval_queues = {
+                pos_interval_queue: pos_sampling_rate,
+                neg_interval_queue: 1 - pos_sampling_rate,
+            }
+            shared_interval_queue = gf.io.SharedIntervalQueue(
+                interval_queues,
+                capacity=50000,
+                name='{}-shared-interval-queue'.format(dataset_id))
+            return shared_interval_queue
+        else:
+            dest_file = os.path.join(
+                self.logdir, os.path.basename(intervals_file))
+            while os.path.isfile(dest_file):
+                dest_file += str(np.random.randint(low=0, high=10))
+            self.tmp_files.append(dest_file)
+            source_stream = BedFileStream(
+                intervals_file, selected_chroms=selected_chroms, holdout_chroms=holdout_chroms, num_epochs=1)
+            with open(dest_file, 'w') as dest_fp:
+                while True:
+                    try:
+                        entry = source_stream.read_entry()
+                    except tf.errors.OutOfRangeError as e:
+                        break
+                    line = '\t'.join(
+                        map(str, map(entry.get, ['chrom', 'start', 'end'])))
+                    if 'labels' in entry:
+                        line += '\t' + '\t'.join([str(i)
+                                                  for i in entry['labels'].tolist()])
+                    dest_fp.write(line + '\n')
+
+            interval_queue = gf.io.StreamingIntervalQueue(
+                dest_file,
+                read_batch_size=read_batch_size,
+                name='{}-interval-queue'.format(dataset_id),
+                num_epochs=num_epochs,
+                capacity=50000,
+                shuffle=shuffle,
+                min_after_dequeue=40000,
+                summary=True)
+            return interval_queue
 
     def get_queue(self, dataset, selected_chroms=None, holdout_chroms=None,
                   num_epochs=None, asynchronous_enqueues=True,
@@ -164,9 +236,9 @@ class GenomeFlowInterface(object):
                           holdout_chroms=None, num_epochs=None, pos_sampling_rate=None,
                           input_names=None, shuffle=False, enqueues_per_thread=[128]):
         interval_queue = self.get_interval_queue(
-            dataset, dataset_id, selected_chrom=selected_chrom,
+            dataset, dataset_id, selected_chroms=selected_chroms,
             holdout_chroms=holdout_chroms, num_epochs=num_epochs,
-            read_batch_size=1, shuffle=shuffle)
+            read_batch_size=1, pos_sampling_rate=pos_sampling_rate, shuffle=shuffle)
         inputs = dataset['inputs']
         if input_names is not None:  # use only these inputs in the example queue
             assert all([input_name in inputs.keys()

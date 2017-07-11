@@ -1,0 +1,8 @@
+{
+    "task_names": [
+        "ATF7"
+    ], 
+    "GM12878": {
+        "intervals_file": "/srv/scratch/tfbinding/intervals_specs/v0.2/genome_wide/single_celltype/GM12878/chr9_bin200_flank400_stride50.GM12878.ATF7.intervals_file.tsv.gz"
+    }
+}

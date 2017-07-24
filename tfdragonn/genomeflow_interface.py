@@ -48,9 +48,10 @@ class GenomeFlowInterface(object):
 
     def __init__(self, datasetspec, intervalspec, modelspec, logdir,
                  shuffle=True, pos_sampling_rate=0.05,
-                 validation_chroms=None, holdout_chroms=None):
+                 validation_chroms=None, holdout_chroms=None, validation_intervalspec=None):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
+        self.validation_intervalspec = validation_intervalspec
         self.modelspec = modelspec
         self.logdir = logdir
         input_names = models.model_inputs_from_config(modelspec)
@@ -62,6 +63,9 @@ class GenomeFlowInterface(object):
         self.holdout_chroms = holdout_chroms
         self.dataset = datasets.parse_inputs_and_intervals(
             datasetspec, intervalspec)
+        if self.validation_intervalspec is not None:
+            self.validation_dataset = datasets.parse_inputs_and_intervals(
+                datasetspec, self.validation_intervalspec)
         self.task_names = self.dataset.values()[0]['task_names']
         self.tmp_files = []
 
@@ -80,14 +84,24 @@ class GenomeFlowInterface(object):
     def get_validation_queue(self, num_epochs=1, asynchronous_enqueues=False,
                              enqueues_per_thread=[128, 1]):
         selected_chroms = self.validation_chroms
-        return self.get_queue(
-            self.dataset,
-            selected_chroms=selected_chroms,
-            holdout_chroms=self.holdout_chroms,
-            num_epochs=num_epochs,
-            asynchronous_enqueues=asynchronous_enqueues,
-            input_names=self.input_names,
-            enqueues_per_thread=enqueues_per_thread)
+        if self.validation_intervalspec is not None:
+            return self.get_queue(
+                self.validation_dataset,
+                selected_chroms=selected_chroms,
+                holdout_chroms=self.holdout_chroms,
+                num_epochs=num_epochs,
+                asynchronous_enqueues=asynchronous_enqueues,
+                input_names=self.input_names,
+                enqueues_per_thread=enqueues_per_thread)
+        else:
+            return self.get_queue(
+                self.dataset,
+                selected_chroms=selected_chroms,
+                holdout_chroms=self.holdout_chroms,
+                num_epochs=num_epochs,
+                asynchronous_enqueues=asynchronous_enqueues,
+                input_names=self.input_names,
+                enqueues_per_thread=enqueues_per_thread)
 
     def get_interval_queue(self, dataset, dataset_id, selected_chroms=None,
                            holdout_chroms=None, num_epochs=None,

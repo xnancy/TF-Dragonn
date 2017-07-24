@@ -169,7 +169,7 @@ class ClassifierTrainer(object):
 
         except Exception as e:
             if iterator is not None:  # NOQA
-                iterator.close() # NOQA
+                iterator.close()  # NOQA
             raise e
 
         predictions = np.vstack(predictions)

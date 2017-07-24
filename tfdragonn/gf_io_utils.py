@@ -12,7 +12,7 @@ class ExampleQueueIterator(object):
     def num_examples(self):
         return self._queue.num_examples
 
-    def __init__(self, queue, num_exs_batch=128, num_epochs=None, num_exs_epoch=None,
+    def __init__(self, queue, num_exs_batch=128, num_epochs=1, num_exs_epoch=None,
                  allow_smaller_final_batch=False):
         """
         If num_epochs is set, limit number of epochs to iterate over.

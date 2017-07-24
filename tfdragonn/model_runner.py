@@ -152,13 +152,19 @@ class TrainRunner(BaseModelRunner):
 
     @classmethod
     def add_additional_args(cls, parser):
+        parser.add_argument('--validation-intervalspec',
+                            type=os.path.abspath,
+                            help='Heldout celltype intervalspec to use as validation set, default: None',
+                            default=None)
         parser.add_argument('--holdout-chroms',
                             type=json.loads,
-                            help='Set of chroms to holdout entirely from training/validation as a json string, default: "{}"'.format(str(DEFAULT_HOLDOUT_CHROMS)),
+                            help='Set of chroms to holdout entirely from training/validation as a json string, default: "{}"'.format(
+                                str(DEFAULT_HOLDOUT_CHROMS)),
                             default=DEFAULT_HOLDOUT_CHROMS)
         parser.add_argument('--valid-chroms',
                             type=json.loads,
-                            help='Set of chroms to holdout from training and use for validation as a json string, default: "{}"'.format(str(DEFAULT_VALID_CHROMS)),
+                            help='Set of chroms to holdout from training and use for validation as a json string, default: "{}"'.format(
+                                str(DEFAULT_VALID_CHROMS)),
                             default=DEFAULT_VALID_CHROMS)
         parser.add_argument('--learning-rate',
                             type=float,
@@ -174,11 +180,13 @@ class TrainRunner(BaseModelRunner):
                             default=DEFAULT_EPOCH_SIZE)
         parser.add_argument('--early-stopping-metric',
                             type=str,
-                            help='Early stopping metric key, default: {}'.format(DEFAULT_EARLYSTOPPING_KEY),
+                            help='Early stopping metric key, default: {}'.format(
+                                DEFAULT_EARLYSTOPPING_KEY),
                             default=DEFAULT_EARLYSTOPPING_KEY)
         parser.add_argument('--early-stopping-patience',
                             type=int,
-                            help='Early stopping patience (int), default: {}'.format(DEFAULT_EARLYSTOPPING_PATIENCE),
+                            help='Early stopping patience (int), default: {}'.format(
+                                DEFAULT_EARLYSTOPPING_PATIENCE),
                             default=DEFAULT_EARLYSTOPPING_PATIENCE)
 
     def run(self, params):
@@ -192,7 +200,8 @@ class TrainRunner(BaseModelRunner):
         data_interface = GenomeFlowInterface(
             params.datasetspec, params.intervalspec, params.modelspec, params.logdir,
             validation_chroms=params.valid_chroms,
-            holdout_chroms=params.holdout_chroms)
+            holdout_chroms=params.holdout_chroms,
+            validation_intervalspec=params.validation_intervalspec)
         train_queue = data_interface.get_train_queue()
         validation_queue = data_interface.get_validation_queue()
 

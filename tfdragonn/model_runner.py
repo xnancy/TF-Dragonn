@@ -192,7 +192,8 @@ class TrainRunner(BaseModelRunner):
         data_interface = GenomeFlowInterface(
             params.datasetspec, params.intervalspec, params.modelspec, params.logdir,
             validation_chroms=params.valid_chroms,
-            holdout_chroms=params.holdout_chroms)
+            holdout_chroms=params.holdout_chroms,
+            logger=self._logger)
         train_queue = data_interface.get_train_queue()
         validation_queue = data_interface.get_validation_queue()
 

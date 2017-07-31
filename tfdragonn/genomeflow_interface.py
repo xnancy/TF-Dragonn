@@ -48,7 +48,8 @@ class GenomeFlowInterface(object):
 
     def __init__(self, datasetspec, intervalspec, modelspec, logdir,
                  shuffle=True, pos_sampling_rate=0.05,
-                 validation_chroms=None, holdout_chroms=None):
+                 validation_chroms=None, holdout_chroms=None,
+                 logger=None):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
         self.modelspec = modelspec
@@ -60,11 +61,17 @@ class GenomeFlowInterface(object):
         self.pos_sampling_rate = pos_sampling_rate
         self.validation_chroms = validation_chroms
         self.holdout_chroms = holdout_chroms
+        self.logger = logger
         self.dataset = datasets.parse_inputs_and_intervals(
             datasetspec, intervalspec)
         self.task_names = self.dataset.values()[0]['task_names']
         self.tmp_files = []
-
+        if self.logger is not None:
+            self.logger.info('GenomeFlowInterface Settings:')
+            self.logger.info('shuffle: {}'.format(shuffle))
+            self.logger.info('pos_sampling_rate: {}'.format(pos_sampling_rate))
+            self.logger.info('validation_chroms: {}'.format(validation_chroms))
+            self.logger.info('holdout_chroms: {}'.format(holdout_chroms))
     def get_train_queue(self):
         skip_chroms = []
         if self.validation_chroms is not None:
@@ -96,10 +103,10 @@ class GenomeFlowInterface(object):
         if pos_sampling_rate is not None:
             def pos_sampling_fn(record):
                 # single task only
-                return np.array(record[-1], dtype=np.int32)[0] > 0
+                return np.array(record[-1], dtype=np.int32)[0] == 1
 
             def neg_sampling_fn(record):
-                return np.array(record[-1], dtype=np.int32)[0] < 1
+                return np.array(record[-1], dtype=np.int32)[0] == 0
             pos_only_stream = BedFileStream(
                 intervals_file,
                 selected_chroms=selected_chroms,

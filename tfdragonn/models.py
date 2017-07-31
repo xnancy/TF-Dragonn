@@ -83,6 +83,8 @@ _input_reshape_func = {
 model_inputs = {
     "SequenceClassifier": [
         "data/genome_data_dir"],
+    "AmrSequenceClassifier": [
+        "data/genome_data_dir"],
     "SequenceBaselineClassifier": [
         "data/genome_data_dir"],
     "SequenceAndDnaseClassifier": [
@@ -549,3 +551,40 @@ class SequenceDnaseTssDhsCountAndTssExpressionClassifier(Classifier):
         logits = Dense(num_tasks)(logits)
         logits = Activation('sigmoid')(logits)
         self.model = Model(input=keras_inputs.values(), output=logits)
+
+
+class AmrSequenceClassifier(Classifier):
+
+    def __init__(self, shapes, num_tasks,
+                 num_filters=(32, 32, 32), conv_width=(15, 14, 14),
+                 batch_norm=True, pool_width=40, pool_stride=20,
+                 fc_layer_sizes=(10,), dropout=(0.5,), final_dropout=0.5):
+        assert len(num_filters) == len(conv_width)
+        assert len(fc_layer_sizes) == len(dropout)
+
+        # configure inputs
+        keras_inputs = self.get_keras_inputs(shapes)
+        inputs = self.reshape_keras_inputs(keras_inputs)
+
+        # convolve sequence
+        seq_preds = inputs["data/genome_data_dir"]
+        for i, (nb_filter, nb_col) in enumerate(zip(num_filters, conv_width)):
+            seq_preds = Convolution1D(
+                nb_filter, nb_col, 'he_normal')(seq_preds)
+            if batch_norm:
+                seq_preds = BatchNormalization()(seq_preds)
+            seq_preds = Activation('relu')(seq_preds)
+
+        # pool
+        seq_preds = MaxPooling1D(pool_width, pool_stride)(seq_preds)
+        seq_preds = Flatten()(seq_preds)
+
+        # fully connect, drop before fc layers
+        for drop_rate, fc_layer_size in zip(dropout, fc_layer_sizes):
+            seq_preds = Dropout(dropout)(seq_preds)
+            seq_preds = Dense(fc_layer_size)(seq_preds)
+            seq_preds = Activation('relu')(seq_preds)
+        seq_preds = Dropout(final_dropout)(seq_preds)
+        seq_preds = Dense(output_dim=num_tasks)(seq_preds)
+        seq_preds = Activation('sigmoid')(seq_preds)
+        self.model = Model(input=keras_inputs.values(), output=seq_preds)

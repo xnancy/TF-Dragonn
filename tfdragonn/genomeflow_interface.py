@@ -49,9 +49,7 @@ class GenomeFlowInterface(object):
     def __init__(self, datasetspec, intervalspec, modelspec, logdir,
                  shuffle=True, pos_sampling_rate=0.05,
                  validation_chroms=None, holdout_chroms=None,
-                 validation_intervalspec=None,
-                 logger=None):
-                 validation_chroms=None, holdout_chroms=None, ):
+                 validation_intervalspec=None, logger=None):
         self.datasetspec = datasetspec
         self.intervalspec = intervalspec
         self.validation_intervalspec = validation_intervalspec

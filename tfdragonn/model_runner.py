@@ -11,6 +11,7 @@ import ntpath
 import shutil
 
 from keras import backend as K
+import numpy as np
 import tensorflow as tf
 
 from tfdragonn import database
@@ -19,7 +20,6 @@ from tfdragonn import trainers
 from tfdragonn import loggers
 
 from .genomeflow_interface import GenomeFlowInterface
-
 
 # tf-binding project specific settings (only used if --is-tfbinding-project is
 # specified, or the environment variable 'IS_TFBINDING_PROJECT' is set)
@@ -251,3 +251,48 @@ class TestRunner(BaseModelRunner):
 
 class PredictRunner(TestRunner):
     command = 'predict'
+
+    @classmethod
+    def add_additional_args(cls, parser):
+        parser.add_argument('prefix',
+                            type=str,
+                            help='Prefix for files with predictions')
+        parser.add_argument('--flank-size',
+                            type=int,
+                            help='Size of flank in input intervals, flanks are trimmed before writing intervals to file. default: 400',
+                            default=400)
+
+    def run(self, params):
+        data_interface = GenomeFlowInterface(
+            params.datasetspec, params.intervalspec, params.modelspec, params.logdir, shuffle=False, pos_sampling_rate=None)
+        example_queues = {dataset_id: data_interface.get_example_queue(dataset_values, dataset_id,
+                                                                       num_epochs=1,
+                                                                       input_names=data_interface.input_names,
+                                                                       enqueues_per_thread=[128, 1])
+                          for dataset_id, dataset_values in data_interface.dataset.items()}
+        model = models.model_from_minimal_config(
+            params.modelspec, example_queues.values()[0].output_shapes, len(data_interface.task_names))
+        model.load_weights(os.path.join(
+            params.logdir, 'model.weights.h5'))
+        trainer = trainers.ClassifierTrainer(
+            task_names=data_interface.task_names)
+
+        for dataset_id, example_queue in example_queues.items():
+            self._logger.info('generating predictions for dataset {}'.format(dataset_id))
+            intervals, predictions = trainer.predict(model, example_queue)
+
+            # trim flanks
+            intervals['start'] += params.flank_size
+            intervals['end'] -= params.flank_size
+
+            # write intervals and per task predictions to file
+            for task_indx, task_name in enumerate(data_interface.task_names):
+                prediction_data = np.column_stack((intervals['chrom'],
+                                                   intervals['start'],
+                                                   intervals['end'],
+                                                   predictions[:, task_indx]))
+                prediction_fname = "{}.{}.{}.tab.gz".format(params.prefix, task_name, dataset_id)
+                np.savetxt(prediction_fname, prediction_data, delimiter='\t', fmt='%s')
+                self._logger.info("\nSaved {} predictions in dataset {} to {}".format(
+                    task_name, dataset_id, prediction_fname))
+            self._logger.info('Done!')

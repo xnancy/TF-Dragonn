@@ -47,6 +47,11 @@ DEFAULT_LEARNING_RATE = 0.0003
 DEFER_DELETE_SIZE = int(250 * 1e6)  # 250MB
 GPU_MEM_PROP = 0.45  # Allows 2x sessions / gpu
 
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = IOError
+
 backend = K.backend()
 if backend != 'tensorflow':
     raise ValueError(
@@ -59,6 +64,7 @@ class BaseModelRunner(object):
     def __init__(self):
         self._logger_name = 'tfdragonn-{}'.format(self.command)
         self._logger = loggers.get_logger(self._logger_name)
+	self._model_exists = False
 
     @classmethod
     def get_parser(cls):
@@ -108,8 +114,10 @@ class BaseModelRunner(object):
                 database.add_run(run_id, params.datasetspec, params.intervalspec,
                                  params.modelspec, params.logdir)
         self.validate_paths(params)
-        if self.command == 'train':
+        if self.command == 'train' and not os.path.exists(params.logdir):
             os.makedirs(params.logdir)
+	if os.path.exists(os.path.join(params.logdir, "model.weights.h5")):
+	    self._model_exists = True
         loggers.add_logdir(self._logger_name, params.logdir)
         self.setup_keras_session(params.visiblegpus)
         self.run(params)
@@ -134,7 +142,8 @@ class BaseModelRunner(object):
         if os.path.isdir(params.logdir):
             if len(os.listdir(params.logdir)) == 0:
                 shutil.rmtree(params.logdir)
-        assert(not os.path.exists(params.logdir))
+        if os.path.exists(params.logdir):
+		print(str(params.logdir) + " exists! Warning.")
         if IS_TFBINDING_PROJECT:
             assert(params.logdir.startswith(TFBINDING_LOGDIR_PREFIX))
 
@@ -219,8 +228,14 @@ class TrainRunner(BaseModelRunner):
         model = models.model_from_minimal_config(
             params.modelspec, train_queue.output_shapes, len(data_interface.task_names))
 
+	prefix = 'model'
+	if self._model_exists:
+	    print("Model exists! Restoring weights.")
+	    model.load_weights(os.path.join(params.logdir, 'model.weights.h5'))	
+	    prefix = 'newmodel'
+
         trainer.train(model, train_queue, validation_queue,
-                      save_best_model_to_prefix=os.path.join(params.logdir, "model"))
+                      save_best_model_to_prefix=os.path.join(params.logdir, prefix))
 
 
 

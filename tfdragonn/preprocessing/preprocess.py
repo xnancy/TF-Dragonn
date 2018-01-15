@@ -81,6 +81,8 @@ def label_regions(raw_intervals_config_file, prefix,
                                                         filter_flank_overlaps=False, genome=genome, n_jobs=n_jobs)
             intervals_file_array = np.empty(
                 (labels.shape[0], 3 + labels.shape[1]), np.dtype((str, 10)))
+	    print(labels.shape)
+	    print(intervals.to_dataframe().as_matrix().shape)
             intervals_file_array[:, :3] = intervals.to_dataframe().as_matrix()[
                 :, :3]
             intervals_file_array[:, 3:] = labels

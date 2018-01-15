@@ -50,6 +50,7 @@ def bed_intersection_scores(region_bedtool, feature_bedtool, f=0.5, F=0.5, e=Tru
         # Get inersection labels and intersecting region subset from a sorted
         # region bedtool
         feature_bedtool = BedTool(feature_bedtool).sort()
+	print("Feature bedtool sorted")
         intersect_labels = bed_intersection_labels(
             region_bedtool, feature_bedtool, f=f, F=F)
         intersecting_regions = region_bedtool.at(
@@ -197,7 +198,10 @@ def get_tf_predictive_setup(true_feature_bedtools, region_bedtool=None,
                                       for bedtool in ambiguous_feature_bedtools]
     # merge and bin region_bedtools
     if region_bedtool is not None:
-        region_bedtool = BedTool(region_bedtool).sort().merge()
+	print(region_bedtool)
+        region_bedtool = BedTool(region_bedtool).sort()
+	print("Made Bedtool")
+	region_bedtool = region_bedtool.merge()
         bins = bin_bed(region_bedtool, bin_size=bin_size, stride=stride)
     else:  # use union of true peak bedtools
         bedtools_to_merge = [

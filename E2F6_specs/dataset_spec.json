@@ -1,0 +1,5 @@
+{
+  "A549": {
+        "genome_data_dir": "/datadrive/fasta/"
+    }
+}

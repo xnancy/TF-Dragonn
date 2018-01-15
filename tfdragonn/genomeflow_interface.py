@@ -137,28 +137,35 @@ class GenomeFlowInterface(object):
                 self.logdir, os.path.basename(intervals_file) + 'neg')
             pos_dest_file = os.path.join(
                 self.logdir, os.path.basename(intervals_file) + 'pos')
-            while os.path.isfile(neg_dest_file):
-                neg_dest_file += str(np.random.randint(low=0, high=10))
-            while os.path.isfile(pos_dest_file):
-                pos_dest_file += str(np.random.randint(low=0, high=10))
-            self.tmp_files += [neg_dest_file, pos_dest_file]
+            print(neg_dest_file)
+            print(pos_dest_file)
+	    # while os.path.isfile(neg_dest_file):
+                # neg_dest_file += str(np.random.randint(low=0, high=10))
+            # while os.path.isfile(pos_dest_file):
+                # pos_dest_file += str(np.random.randint(low=0, high=10))
+            # self.tmp_files += [neg_dest_file, pos_dest_file]
             # pos queue
-            with open(pos_dest_file, 'w') as pos_dest_fp:
-                while True:
-                    try:
-                        entry = pos_only_stream.read_entry()
-                    except tf.errors.OutOfRangeError as e:
-                        break
-                    if entry['chrom'] in holdout_chroms:
-                        raise ValueError('Chromosome cannot be in holdout chromosomes')
-                    line = '\t'.join(
-                        map(str, map(entry.get, ['chrom', 'start', 'end'])))
-                    if 'labels' in entry:
-                        line += '\t' + '\t'.join([str(i)
-                                                  for i in entry['labels'].tolist()])
-                    pos_dest_fp.write(line + '\n')
+	    if not os.path.isfile(pos_dest_file) or os.path.getsize(pos_dest_file) == 0:
+		with open(pos_dest_file, 'w') as pos_dest_fp:
+			print("Creating new pos dest file")
+			while True:
+			    try:
+				entry = pos_only_stream.read_entry()
+			    except tf.errors.OutOfRangeError as e:
+				print("Out of range error")
+				break
+			    if entry['chrom'] in holdout_chroms:
+				raise ValueError('Chromosome cannot be in holdout chromosomes')
+			    line = '\t'.join(
+				map(str, map(entry.get, ['chrom', 'start', 'end'])))
+			    if 'labels' in entry:
+				line += '\t' + '\t'.join([str(i)
+							  for i in entry['labels'].tolist()])
+			    # print(line)
+			    pos_dest_fp.write(line + '\n')
 
-            pos_interval_queue = gf.io.StreamingIntervalQueue(
+            print(dataset_id)
+	    pos_interval_queue = gf.io.StreamingIntervalQueue(
                 pos_dest_file,
                 read_batch_size=read_batch_size,
                 name='{}-pos-interval-queue'.format(dataset_id),
@@ -167,22 +174,24 @@ class GenomeFlowInterface(object):
                 shuffle=shuffle,
                 min_after_dequeue=40000,
                 summary=True)
-
+	    print("Made pos interval queue")
             # neg only queue
-            with open(neg_dest_file, 'w') as neg_dest_fp:
-                while True:
-                    try:
-                        entry = neg_only_stream.read_entry()
-                    except tf.errors.OutOfRangeError as e:
-                        break
-                    if entry['chrom'] in holdout_chroms:
-                        raise ValueError('Chromosome cannot be in holdout chromosomes')
-                    line = '\t'.join(
-                        map(str, map(entry.get, ['chrom', 'start', 'end'])))
-                    if 'labels' in entry:
-                        line += '\t' + '\t'.join([str(i)
-                                                  for i in entry['labels'].tolist()])
-                        neg_dest_fp.write(line + '\n')
+	    if not os.path.isfile(neg_dest_file) or os.path.getsize(neg_dest_file) == 0:
+		    with open(neg_dest_file, 'w') as neg_dest_fp:
+			print("Rewriting negative dest file")
+			while True:
+			    try:
+				entry = neg_only_stream.read_entry()
+			    except tf.errors.OutOfRangeError as e:
+				break
+			    if entry['chrom'] in holdout_chroms:
+				raise ValueError('Chromosome cannot be in holdout chromosomes')
+			    line = '\t'.join(
+				map(str, map(entry.get, ['chrom', 'start', 'end'])))
+			    if 'labels' in entry:
+				line += '\t' + '\t'.join([str(i)
+							  for i in entry['labels'].tolist()])
+				neg_dest_fp.write(line + '\n')
             neg_interval_queue = gf.io.StreamingIntervalQueue(
                 neg_dest_file,
                 read_batch_size=read_batch_size,
@@ -192,6 +201,7 @@ class GenomeFlowInterface(object):
                 shuffle=shuffle,
                 min_after_dequeue=40000,
                 summary=True)
+	    print("Made neg dest queue")
             interval_queues = {
                 pos_interval_queue: pos_sampling_rate,
                 neg_interval_queue: 1 - pos_sampling_rate,
@@ -237,7 +247,8 @@ class GenomeFlowInterface(object):
                   num_epochs=None, asynchronous_enqueues=True,
                   pos_sampling_rate=None, input_names=None, shuffle=False,
                   enqueues_per_thread=[128]):
-        examples_queues = {
+        # print(dataset.items())
+	examples_queues = {
             dataset_id: self.get_example_queue(dataset_values, dataset_id,
                                                holdout_chroms=holdout_chroms,
                                                selected_chroms=selected_chroms,

@@ -30,6 +30,8 @@ PROCESSED_INPUT_NAMES = set(['genome_data_dir', 'dnase_data_dir',
 def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
     """Parse the processed inputs and intervals files, return a dataset dictionary."""
 
+    print(processed_inputs_file)
+    print(processed_intervals_file)
     inputs_files = {}
     with open(processed_inputs_file, 'r') as fp:
         data = json.load(fp)
@@ -61,6 +63,7 @@ def parse_inputs_and_intervals(processed_inputs_file, processed_intervals_file):
 def parse_raw_inputs(raw_inputs_file, require_consistentcy=True):
     """parses raw inputs file, returns inputs dictionary"""
 
+    print(raw_inputs_file)
     with open(raw_inputs_file, 'r') as fp:
         datasets = json.load(fp, object_pairs_hook=OrderedDict)
     # populate missing input types with None

@@ -1,0 +1,8 @@
+{
+    "task_names": [
+        "CTCF"
+    ],
+    "A549": {
+        "intervals_file": "/datadrive/data_collection/clean/E2F6.train.labels.tsv.gz"
+    }
+}

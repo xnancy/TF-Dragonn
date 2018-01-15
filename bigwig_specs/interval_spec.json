@@ -1,0 +1,8 @@
+{
+    "task_names": [
+        "CTCF"
+    ], 
+    "A549": {
+        "intervals_file": "/datadrive/tf-dragonn/traindnase_.A549.intervals_file.tsv.gz"
+    }
+}

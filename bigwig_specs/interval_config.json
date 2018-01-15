@@ -1,0 +1,7 @@
+{
+    "task_names": ["CTCF"],
+    "A549": {
+	"region_bed":"/datadrive/data_collection/Data/train_regions.blacklistfiltered.bed.gz",
+	"feature_beds":{"CTCF":"/datadrive/data_collection/Data/DNASE.A549.relaxed.narrowPeak.gz"}    
+    }
+}

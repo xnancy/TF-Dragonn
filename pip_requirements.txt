@@ -1,3 +1,4 @@
 git+https://github.com/fchollet/keras
 celery==4.0.2
 flower==0.9.1
+h5py==2.7.1

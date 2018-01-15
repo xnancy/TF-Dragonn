@@ -178,7 +178,7 @@ class SequenceClassifier(Classifier):
         seq_preds = inputs["data/genome_data_dir"]
         for i, (nb_filter, nb_col) in enumerate(zip(num_filters, conv_width)):
             seq_preds = Convolution1D(
-                nb_filter, nb_col, 'he_normal')(seq_preds)
+                nb_filter, nb_col)(seq_preds) #had to delete 'he_normal' name
             if batch_norm:
                 seq_preds = BatchNormalization()(seq_preds)
             seq_preds = Activation('relu')(seq_preds)

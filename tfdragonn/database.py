@@ -13,6 +13,10 @@ DB_CONF_FILE = 'tfdragonn_dbconf.yaml'
 TABLE = 'tfdragonn_v1_test'
 _DB_INIT = False
 
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = IOError
 
 def _get_connection():
     with open(DB_CONF_FILE, 'r') as fp:

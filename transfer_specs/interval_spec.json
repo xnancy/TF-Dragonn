@@ -1,0 +1,8 @@
+{
+    "task_names": [
+        "CTCF"
+    ],
+    "A549": {
+        "intervals_file": "/datadrive/data_collection/clean/CTCF.tsv.gz"
+    }
+}
